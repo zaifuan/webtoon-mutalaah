@@ -8,6 +8,7 @@ const express = require('express');
 const healthRouter = require('./routes/health');
 const projectsRouter = require('./routes/projects');
 const textsRouter = require('./routes/texts');
+const charactersRouter = require('./routes/characters');
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -29,6 +30,10 @@ app.use('/api', healthRouter);
 // ('/' & '/:id' untuk projek; '/:id/text' untuk teks).
 app.use('/api/projects', projectsRouter);
 app.use('/api/projects', textsRouter);
+
+// Fasa 2 — character engine. Dipasang pada /api kerana ia merangkumi
+// laluan /projects/:id/characters dan /characters/:id.
+app.use('/api', charactersRouter);
 
 // Apa-apa laluan /api/* yang tidak dikenali → 404 JSON yang kemas.
 app.use('/api', (req, res) => {

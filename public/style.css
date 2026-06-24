@@ -596,6 +596,219 @@ body.no-scroll {
 .toast--error { background: #b5452f; }
 .toast--info { background: #2a3046; }
 
+/* --- Fasa 2: Tab TEKS / WATAK --- */
+.tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid rgba(215, 166, 74, 0.2);
+}
+
+.tab {
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--light-muted);
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 0.95rem;
+  padding: 9px 14px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.tab:hover {
+  color: var(--light);
+}
+
+.tab.is-active {
+  color: var(--gold);
+  border-bottom-color: var(--gold);
+}
+
+.tab-content {
+  display: block;
+}
+
+/* --- Toolbar & senarai watak --- */
+.char-toolbar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.char-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.char-card {
+  background: linear-gradient(180deg, var(--paper) 0%, var(--paper-edge) 100%);
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px;
+}
+
+.char-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.char-names {
+  min-width: 0;
+}
+
+.char-ar {
+  font-family: var(--arabic);
+  font-size: 1.4rem;
+  color: var(--teal);
+  line-height: 1.4;
+}
+
+.char-ms {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 1.05rem;
+  color: var(--text);
+  margin-top: 2px;
+}
+
+.char-code {
+  display: inline-block;
+  margin-top: 10px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.74rem;
+  letter-spacing: 0.06em;
+  color: #1d6a62;
+  background: #cdeae5;
+  border-radius: 5px;
+  padding: 3px 8px;
+}
+
+.char-role {
+  margin-top: 10px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.char-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.char-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+}
+
+/* --- Badge jenis watak --- */
+.badge {
+  flex: 0 0 auto;
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-family: var(--display);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+/* emas — tokoh mulia (tanpa muka) */
+.badge--noble_figure_no_face {
+  background: rgba(215, 166, 74, 0.18);
+  border-color: rgba(215, 166, 74, 0.55);
+  color: #8a6a1f;
+}
+
+/* biru — watak biasa */
+.badge--ordinary_character {
+  background: #d6e4f7;
+  border-color: rgba(47, 93, 150, 0.35);
+  color: #2f5d96;
+}
+
+/* kelabu — watak latar */
+.badge--background_character {
+  background: #e6e3da;
+  border-color: rgba(107, 102, 85, 0.35);
+  color: #5c5743;
+}
+
+/* --- Cip polisi muka --- */
+.chip {
+  display: inline-block;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-family: var(--display);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.chip--glowing_light {
+  background: rgba(215, 166, 74, 0.15);
+  color: #8a6a1f;
+}
+
+.chip--normal {
+  background: rgba(28, 34, 51, 0.07);
+  color: var(--muted);
+}
+
+/* --- Baris terkunci dalam borang watak --- */
+.locked-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 11px;
+  margin-bottom: 12px;
+  background: rgba(28, 34, 51, 0.05);
+  border: 1px dashed var(--line);
+  border-radius: 7px;
+}
+
+.locked-label {
+  font-family: var(--display);
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.locked-value {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  color: var(--text);
+}
+
+/* --- Select & textarea JSON dalam borang --- */
+select.field-input {
+  cursor: pointer;
+  background-color: #fffdf7;
+}
+
+.field-input--mono {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
 /* --- Fokus papan kekunci --- */
 :focus-visible {
   outline: 2px solid var(--gold);

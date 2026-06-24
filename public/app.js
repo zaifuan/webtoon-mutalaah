@@ -81,6 +81,21 @@ const api = {
   },
   saveText(id, payload) {
     return this.req('PUT', '/api/projects/' + id + '/text', payload);
+  },
+  listCharacters(id) {
+    return this.req('GET', '/api/projects/' + id + '/characters');
+  },
+  generateCharacters(id) {
+    return this.req('POST', '/api/projects/' + id + '/generate-characters', {});
+  },
+  addCharacter(id, payload) {
+    return this.req('POST', '/api/projects/' + id + '/characters', payload);
+  },
+  updateCharacter(charId, payload) {
+    return this.req('PUT', '/api/characters/' + charId, payload);
+  },
+  deleteCharacter(charId) {
+    return this.req('DELETE', '/api/characters/' + charId);
   }
 };
 
@@ -103,6 +118,27 @@ function statusLabel(s) {
 
 function statusPill(s) {
   return el('span', { class: 'status-pill status-pill--' + (s || 'draft'), text: statusLabel(s) });
+}
+
+// ---- Label watak ----------------------------------------------------------
+const CHAR_TYPE_LABELS = {
+  noble_figure_no_face: 'Tokoh mulia (tanpa muka)',
+  ordinary_character: 'Watak biasa',
+  background_character: 'Watak latar'
+};
+const FACE_POLICY_LABELS = {
+  glowing_light: 'Cahaya bersinar',
+  normal: 'Normal'
+};
+
+function charTypeLabel(t) {
+  return CHAR_TYPE_LABELS[t] || t || '—';
+}
+function facePolicyLabel(f) {
+  return FACE_POLICY_LABELS[f] || f || '—';
+}
+function charTypeBadge(t) {
+  return el('span', { class: 'badge badge--' + (t || 'ordinary_character'), text: charTypeLabel(t) });
 }
 
 // ---- Utiliti ---------------------------------------------------------------
@@ -342,16 +378,15 @@ async function renderDashboard() {
   }
 }
 
-// ---- Paparan: Detail + editor teks ---------------------------------------
+// ---- Paparan: Detail (tab TEKS / WATAK) ----------------------------------
 async function renderDetail(id) {
   const view = byId('view');
   view.innerHTML = '';
   view.appendChild(el('p', { class: 'muted', text: 'Memuatkan…' }));
 
-  let project, text;
+  let project;
   try {
     project = await api.getProject(id);
-    text = await api.getText(id);
   } catch (err) {
     view.innerHTML = '';
     view.appendChild(el('a', { class: 'back-link', href: '#/', text: '← Semua projek' }));
@@ -363,6 +398,10 @@ async function renderDetail(id) {
   view.appendChild(el('a', { class: 'back-link', href: '#/', text: '← Semua projek' }));
 
   const statusWrap = el('span', { class: 'detail-status' }, statusPill(project.status));
+  function updateStatus(s) {
+    statusWrap.innerHTML = '';
+    statusWrap.appendChild(statusPill(s));
+  }
 
   view.appendChild(el('div', { class: 'detail-head' }, [
     el('div', { class: 'detail-head-row' }, [
@@ -379,33 +418,51 @@ async function renderDetail(id) {
     project.description ? el('p', { class: 'detail-desc', text: project.description }) : null
   ]));
 
-  // Editor teks (tiga panel)
-  const arInput = el('textarea', {
-    class: 'editor-input editor-input--ar',
-    id: 't-ar',
-    dir: 'rtl',
-    lang: 'ar',
-    rows: '8',
-    placeholder: 'الصق نص المطالعة العربي هنا…'
-  });
+  // Tab bar: TEKS | WATAK
+  const tabTeks = el('button', { class: 'tab is-active', type: 'button', text: 'Teks' });
+  const tabWatak = el('button', { class: 'tab', type: 'button', text: 'Watak' });
+  const content = el('div', { class: 'tab-content' });
+
+  function setTab(name) {
+    if (name === 'watak') {
+      tabWatak.className = 'tab is-active';
+      tabTeks.className = 'tab';
+      renderCharacterTab(id, content, updateStatus);
+    } else {
+      tabTeks.className = 'tab is-active';
+      tabWatak.className = 'tab';
+      renderTextTab(id, content, updateStatus);
+    }
+  }
+  tabTeks.addEventListener('click', function () { setTab('teks'); });
+  tabWatak.addEventListener('click', function () { setTab('watak'); });
+
+  view.appendChild(el('div', { class: 'tabs' }, [tabTeks, tabWatak]));
+  view.appendChild(content);
+  setTab('teks');
+}
+
+// ---- Tab: Teks (editor tiga panel — fungsi Fasa 1) -----------------------
+async function renderTextTab(id, container, updateStatus) {
+  container.innerHTML = '';
+  container.appendChild(el('p', { class: 'muted', text: 'Memuatkan teks…' }));
+
+  let text;
+  try {
+    text = await api.getText(id);
+  } catch (err) {
+    container.innerHTML = '';
+    container.appendChild(el('p', { class: 'error-text', text: 'Gagal memuatkan teks: ' + err.message }));
+    return;
+  }
+  container.innerHTML = '';
+
+  const arInput = el('textarea', { class: 'editor-input editor-input--ar', dir: 'rtl', lang: 'ar', rows: '8', placeholder: 'الصق نص المطالعة العربي هنا…' });
   arInput.value = text.original_ar || '';
-
-  const msInput = el('textarea', {
-    class: 'editor-input',
-    id: 't-ms',
-    rows: '6',
-    placeholder: 'Terjemahan Melayu…'
-  });
+  const msInput = el('textarea', { class: 'editor-input', rows: '6', placeholder: 'Terjemahan Melayu…' });
   msInput.value = text.translation_ms || '';
-
-  const notesInput = el('textarea', {
-    class: 'editor-input',
-    id: 't-notes',
-    rows: '4',
-    placeholder: 'Nota, kosa kata, atau nilai pengajaran…'
-  });
+  const notesInput = el('textarea', { class: 'editor-input', rows: '4', placeholder: 'Nota, kosa kata, atau nilai pengajaran…' });
   notesInput.value = text.notes || '';
-
   const saveBtn = el('button', { class: 'btn btn-primary', type: 'submit', text: 'Simpan teks' });
 
   const editor = el('form', {
@@ -415,15 +472,8 @@ async function renderDetail(id) {
       saveBtn.disabled = true;
       saveBtn.textContent = 'Menyimpan…';
       try {
-        const result = await api.saveText(id, {
-          original_ar: arInput.value,
-          translation_ms: msInput.value,
-          notes: notesInput.value
-        });
-        if (result && result.project) {
-          statusWrap.innerHTML = '';
-          statusWrap.appendChild(statusPill(result.project.status));
-        }
+        const result = await api.saveText(id, { original_ar: arInput.value, translation_ms: msInput.value, notes: notesInput.value });
+        if (result && result.project) updateStatus(result.project.status);
         toast('Teks disimpan', 'ok');
       } catch (err) {
         toast(err.message, 'error');
@@ -451,7 +501,208 @@ async function renderDetail(id) {
     el('div', { class: 'editor-actions' }, saveBtn)
   ]);
 
-  view.appendChild(editor);
+  container.appendChild(editor);
+}
+
+// ---- Tab: Watak -----------------------------------------------------------
+async function renderCharacterTab(id, container, updateStatus) {
+  container.innerHTML = '';
+  container.appendChild(el('p', { class: 'muted', text: 'Memuatkan watak…' }));
+
+  let chars;
+  try {
+    chars = await api.listCharacters(id);
+  } catch (err) {
+    container.innerHTML = '';
+    container.appendChild(el('p', { class: 'error-text', text: 'Gagal memuatkan watak: ' + err.message }));
+    return;
+  }
+  container.innerHTML = '';
+
+  function reload() { renderCharacterTab(id, container, updateStatus); }
+
+  const genBtn = el('button', { class: 'btn btn-primary', type: 'button', text: 'Jana watak' });
+  genBtn.addEventListener('click', async function () {
+    genBtn.disabled = true;
+    genBtn.textContent = 'Menjana…';
+    try {
+      const r = await api.generateCharacters(id);
+      if (r && r.project) updateStatus(r.project.status);
+      const made = (r && r.created) ? r.created.length : 0;
+      const detected = (r && r.detected) || 0;
+      if (detected === 0) toast('Tiada watak dikenali daripada teks', 'info');
+      else toast(made > 0 ? ('Dijana ' + made + ' watak baharu') : 'Semua watak sudah wujud', 'ok');
+      reload();
+    } catch (err) {
+      genBtn.disabled = false;
+      genBtn.textContent = 'Jana watak';
+      toast(err.message, 'error');
+    }
+  });
+
+  const addBtn = el('button', { class: 'btn btn-ghost', type: 'button', text: 'Tambah watak' });
+  addBtn.addEventListener('click', function () { openCharacterForm(id, null, updateStatus, reload); });
+
+  container.appendChild(el('div', { class: 'char-toolbar' }, [genBtn, addBtn]));
+
+  if (!chars.length) {
+    container.appendChild(el('div', { class: 'empty' }, [
+      el('p', { class: 'empty-ar', lang: 'ar', dir: 'rtl', text: 'لا شخصيات بعد' }),
+      el('p', { class: 'empty-title', text: 'Belum ada watak' }),
+      el('p', { class: 'empty-text', text: 'Tekan “Jana watak” untuk mengekstrak watak daripada teks Arab, atau tambah secara manual.' })
+    ]));
+    return;
+  }
+
+  const list = el('div', { class: 'char-list' });
+  chars.forEach(function (c) { list.appendChild(characterCard(c, updateStatus, reload)); });
+  container.appendChild(list);
+}
+
+function characterCard(c, updateStatus, reload) {
+  return el('div', { class: 'char-card' }, [
+    el('div', { class: 'char-top' }, [
+      el('div', { class: 'char-names' }, [
+        c.name_ar ? el('p', { class: 'char-ar', lang: 'ar', dir: 'rtl', text: c.name_ar }) : null,
+        el('p', { class: 'char-ms', text: c.name_ms || '—' })
+      ]),
+      charTypeBadge(c.character_type)
+    ]),
+    el('p', { class: 'char-code', text: c.character_code || '—' }),
+    c.role ? el('p', { class: 'char-role', text: c.role }) : null,
+    el('div', { class: 'char-chips' }, [
+      el('span', { class: 'chip chip--' + (c.face_policy || 'normal'), text: 'Muka: ' + facePolicyLabel(c.face_policy) })
+    ]),
+    el('div', { class: 'char-actions' }, [
+      el('button', { class: 'btn btn-ghost btn-sm', type: 'button', onClick: function () { openCharacterForm(c.project_id, c, updateStatus, reload); }, text: 'Edit' }),
+      el('button', { class: 'btn btn-danger btn-sm', type: 'button', onClick: function () { openCharacterDelete(c, updateStatus, reload); }, text: 'Padam' })
+    ])
+  ]);
+}
+
+// ---- Borang watak (tambah / edit) ----------------------------------------
+function openCharacterForm(projectId, existing, updateStatus, reload) {
+  const isEdit = !!existing;
+
+  const nameAr = el('input', { class: 'field-input field-input--ar', type: 'text', dir: 'rtl', lang: 'ar', placeholder: 'الاسم بالعربية', value: isEdit ? (existing.name_ar || '') : '' });
+  const nameMs = el('input', { class: 'field-input', type: 'text', placeholder: 'cth. Nabi Musa', value: isEdit ? (existing.name_ms || '') : '' });
+  const role = el('input', { class: 'field-input', type: 'text', placeholder: 'Peranan dalam cerita', value: isEdit ? (existing.role || '') : '' });
+  const notes = el('textarea', { class: 'field-input', rows: '2', placeholder: 'Nota penampilan (pilihan)' });
+  notes.value = isEdit ? (existing.appearance_notes || '') : '';
+  const dna = el('textarea', { class: 'field-input field-input--mono', rows: '4', placeholder: '{ "gender": "male", "age": "adult" }' });
+  dna.value = (isEdit && existing.visual_dna) ? JSON.stringify(existing.visual_dna, null, 2) : '';
+
+  let typeSelect = null;
+  if (!isEdit) {
+    typeSelect = el('select', { class: 'field-input' }, [
+      el('option', { value: 'ordinary_character' }, 'Watak biasa'),
+      el('option', { value: 'noble_figure_no_face' }, 'Tokoh mulia (tanpa muka)'),
+      el('option', { value: 'background_character' }, 'Watak latar')
+    ]);
+  }
+
+  const errLine = el('p', { class: 'form-error', hidden: true });
+
+  const fields = [el('h2', { class: 'modal-title', text: isEdit ? 'Edit watak' : 'Tambah watak' })];
+  if (isEdit) {
+    fields.push(el('div', { class: 'locked-row' }, [
+      el('span', { class: 'locked-label', text: 'Character code (tetap)' }),
+      el('span', { class: 'locked-value', text: existing.character_code || '—' })
+    ]));
+    fields.push(el('div', { class: 'locked-row' }, [
+      el('span', { class: 'locked-label', text: 'Jenis' }),
+      charTypeBadge(existing.character_type)
+    ]));
+  }
+  fields.push(el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Nama (Arab)' }), nameAr]));
+  fields.push(el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Nama (Melayu)' }), nameMs]));
+  if (!isEdit) fields.push(el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Jenis watak' }), typeSelect]));
+  fields.push(el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Peranan' }), role]));
+  fields.push(el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Nota penampilan' }), notes]));
+  fields.push(el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Visual DNA (JSON)' }), dna]));
+  fields.push(errLine);
+  fields.push(el('div', { class: 'modal-actions' }, [
+    el('button', { class: 'btn btn-ghost', type: 'button', onClick: closeModal, text: 'Batal' }),
+    el('button', { class: 'btn btn-primary', type: 'submit', text: isEdit ? 'Simpan' : 'Tambah' })
+  ]));
+
+  const form = el('form', {
+    class: 'modal-form',
+    onSubmit: async function (e) {
+      e.preventDefault();
+      const nAr = nameAr.value.trim();
+      const nMs = nameMs.value.trim();
+      if (!nAr && !nMs) { errLine.textContent = 'Sila isi sekurang-kurangnya satu nama.'; errLine.hidden = false; return; }
+      let dnaVal = {};
+      const dnaText = dna.value.trim();
+      if (dnaText) {
+        try {
+          dnaVal = JSON.parse(dnaText);
+          if (!dnaVal || typeof dnaVal !== 'object' || Array.isArray(dnaVal)) throw new Error('x');
+        } catch (_) {
+          errLine.textContent = 'Visual DNA mesti objek JSON yang sah.';
+          errLine.hidden = false;
+          return;
+        }
+      }
+      const submit = form.querySelector('.btn-primary');
+      submit.disabled = true;
+      submit.textContent = 'Menyimpan…';
+      try {
+        if (isEdit) {
+          await api.updateCharacter(existing.id, { name_ar: nAr, name_ms: nMs, role: role.value.trim(), appearance_notes: notes.value.trim(), visual_dna: dnaVal });
+          toast('Watak dikemas kini', 'ok');
+        } else {
+          const r = await api.addCharacter(projectId, { name_ar: nAr, name_ms: nMs, character_type: typeSelect.value, role: role.value.trim(), appearance_notes: notes.value.trim(), visual_dna: dnaVal });
+          if (r && r.project) updateStatus(r.project.status);
+          toast('Watak ditambah', 'ok');
+        }
+        closeModal();
+        reload();
+      } catch (err) {
+        submit.disabled = false;
+        submit.textContent = isEdit ? 'Simpan' : 'Tambah';
+        errLine.textContent = err.message;
+        errLine.hidden = false;
+      }
+    }
+  }, fields);
+
+  openModal(el('div', { class: 'modal-card' }, form));
+}
+
+function openCharacterDelete(c, updateStatus, reload) {
+  const card = el('div', { class: 'modal-card' }, [
+    el('h2', { class: 'modal-title', text: 'Padam watak?' }),
+    el('p', { class: 'modal-text' }, [
+      'Watak ',
+      el('strong', { text: c.name_ms || c.name_ar || c.character_code }),
+      ' akan dipadam. Tindakan ini tidak boleh dibatalkan.'
+    ]),
+    el('div', { class: 'modal-actions' }, [
+      el('button', { class: 'btn btn-ghost', type: 'button', onClick: closeModal, text: 'Batal' }),
+      el('button', {
+        class: 'btn btn-danger', type: 'button', text: 'Padam',
+        onClick: async function (e) {
+          const b = e.currentTarget;
+          b.disabled = true;
+          b.textContent = 'Memadam…';
+          try {
+            const r = await api.deleteCharacter(c.id);
+            if (r && r.project) updateStatus(r.project.status);
+            closeModal();
+            toast('Watak dipadam', 'ok');
+            reload();
+          } catch (err) {
+            b.disabled = false;
+            b.textContent = 'Padam';
+            toast(err.message, 'error');
+          }
+        }
+      })
+    ])
+  ]);
+  openModal(card);
 }
 
 // ---- Router ---------------------------------------------------------------
