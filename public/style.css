@@ -1,0 +1,263 @@
+/* =========================================================================
+   Webtoon Mutalaah — Fasa 0
+   Konsep: satu "panel webtoon" di atas latar manuskrip malam,
+   dengan rel aliran menegak (baca ke bawah) sebagai elemen tanda tangan.
+   Mobile-first.
+   ========================================================================= */
+
+:root {
+  --ink: #161b2e;
+  --ink-2: #20283f;
+  --paper: #f6f0e2;
+  --paper-edge: #e7dec8;
+  --gold: #d7a64a;
+  --teal: #2f8f86;
+  --ok: #46b06a;
+  --alert: #d96b5b;
+
+  --text: #1c2233;
+  --muted: #6b6655;
+
+  --frame: 2px;
+  --radius: 6px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 18px;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(120% 90% at 50% -10%, var(--ink-2) 0%, var(--ink) 60%);
+  background-attachment: fixed;
+}
+
+/* --- Susun atur --- */
+.stage {
+  width: 100%;
+  max-width: 460px;
+  display: flex;
+  align-items: stretch;
+  gap: 14px;
+}
+
+/* Rel aliran menegak: motif scroll webtoon */
+.flow-rail {
+  position: relative;
+  flex: 0 0 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+}
+
+.flow-rail::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(
+    to bottom,
+    transparent 0,
+    rgba(215, 166, 74, 0.55) 12%,
+    rgba(215, 166, 74, 0.55) 88%,
+    transparent 100%
+  );
+}
+
+.notch {
+  position: relative;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--ink);
+  border: 2px solid var(--gold);
+}
+
+/* --- Panel webtoon --- */
+.panel {
+  flex: 1 1 auto;
+  position: relative;
+  background:
+    linear-gradient(180deg, var(--paper) 0%, var(--paper-edge) 100%);
+  border: var(--frame) solid var(--ink);
+  border-radius: var(--radius);
+  /* bayang keras ala bingkai komik */
+  box-shadow: 6px 6px 0 0 rgba(0, 0, 0, 0.35);
+  padding: 30px 24px 24px;
+  animation: panel-in 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* --- Eyebrow --- */
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.eyebrow-ar {
+  font-family: "Reem Kufi", system-ui, sans-serif;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--teal);
+  line-height: 1;
+}
+
+.eyebrow-sep {
+  opacity: 0.5;
+}
+
+.eyebrow-ms {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+/* --- Tajuk --- */
+.title {
+  margin-top: 10px;
+  font-family: "Space Grotesk", system-ui, sans-serif;
+  font-weight: 700;
+  font-size: clamp(2.4rem, 13vw, 3.2rem);
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+/* --- Status API --- */
+.status {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-top: 22px;
+  padding: 11px 14px;
+  background: rgba(28, 34, 51, 0.05);
+  border: 1px solid rgba(28, 34, 51, 0.14);
+  border-radius: 999px;
+}
+
+.status-dot {
+  flex: 0 0 auto;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--muted);
+  box-shadow: 0 0 0 0 rgba(0, 0, 0, 0);
+}
+
+.status-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.status-label {
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.status-detail {
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.status-detail:empty {
+  display: none;
+}
+
+/* Varian status */
+.status--loading .status-dot {
+  background: var(--gold);
+  animation: pulse 1.3s ease-in-out infinite;
+}
+
+.status--ok .status-dot {
+  background: var(--ok);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.status--error .status-dot {
+  background: var(--alert);
+}
+
+.status--error .status-label {
+  color: var(--alert);
+}
+
+/* --- Tag fasa --- */
+.phase-tag {
+  margin-top: 26px;
+  padding-top: 16px;
+  border-top: 1px dashed rgba(28, 34, 51, 0.25);
+  font-family: "Space Grotesk", system-ui, sans-serif;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.phase-tag .phase-sep {
+  color: rgba(28, 34, 51, 0.35);
+  margin: 0 4px;
+}
+
+/* --- Animasi --- */
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(70, 176, 106, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(70, 176, 106, 0);
+  }
+}
+
+/* --- Skrin lebih besar --- */
+@media (min-width: 600px) {
+  .panel {
+    padding: 38px 34px 30px;
+  }
+  .status {
+    margin-top: 26px;
+  }
+}
+
+/* --- Hormati keutamaan kurang gerakan --- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

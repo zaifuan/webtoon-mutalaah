@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#161b2e" />
+  <title>Webtoon Mutalaah</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Reem+Kufi:wght@500;700&family=Space+Grotesk:wght@500;700&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <main class="stage">
+    <!-- Rel aliran menegak: motif "baca ke bawah" sebuah webtoon -->
+    <div class="flow-rail" aria-hidden="true">
+      <span class="notch"></span>
+      <span class="notch"></span>
+      <span class="notch"></span>
+      <span class="notch"></span>
+    </div>
+
+    <!-- Satu panel webtoon -->
+    <section class="panel">
+      <p class="eyebrow">
+        <span class="eyebrow-ar" lang="ar" dir="rtl">مطالعة</span>
+        <span class="eyebrow-sep">·</span>
+        <span class="eyebrow-ms">Studio Webtoon</span>
+      </p>
+
+      <h1 class="title">Webtoon<br />Mutalaah</h1>
+
+      <!-- Status API daripada /api/health -->
+      <div
+        id="api-status"
+        class="status status--loading"
+        role="status"
+        aria-live="polite"
+      >
+        <span class="status-dot" aria-hidden="true"></span>
+        <span class="status-text">
+          <span id="status-label" class="status-label">Menyemak API…</span>
+          <span id="status-detail" class="status-detail"></span>
+        </span>
+      </div>
+
+      <!-- Tag panel = penanda fasa (urutan bermakna) -->
+      <p class="phase-tag">Fasa 0 <span class="phase-sep">·</span> Skeleton Ready</p>
+    </section>
+  </main>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>

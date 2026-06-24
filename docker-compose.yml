@@ -1,0 +1,43 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: webtoon-mutalaah-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${PGUSER:-webtoon}
+      POSTGRES_PASSWORD: ${PGPASSWORD:-webtoon}
+      POSTGRES_DB: ${PGDATABASE:-webtoon_mutalaah}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    # Diikat ke localhost sahaja demi keselamatan (untuk debugging dari host).
+    # Buang baris di bawah jika anda tidak perlu akses DB dari luar container.
+    ports:
+      - "127.0.0.1:${PGPORT_HOST:-5545}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PGUSER:-webtoon} -d ${PGDATABASE:-webtoon_mutalaah}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    container_name: webtoon-mutalaah-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      PGHOST: db
+      PGPORT: 5432
+      PGUSER: ${PGUSER:-webtoon}
+      PGPASSWORD: ${PGPASSWORD:-webtoon}
+      PGDATABASE: ${PGDATABASE:-webtoon_mutalaah}
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    # Jalankan migration dahulu, kemudian mulakan pelayan.
+    command: sh -c "node src/migrate.js && node src/server.js"
+
+volumes:
+  db_data:
