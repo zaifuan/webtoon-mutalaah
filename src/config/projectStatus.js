@@ -9,6 +9,7 @@ const PROJECT_STATUS = Object.freeze({
   DRAFT: 'draft',
   TEXT_READY: 'text_ready',
   CHARACTER_READY: 'character_ready',
+  SCENE_READY: 'scene_ready',
   STORYBOARD_READY: 'storyboard_ready',
   SCRIPT_READY: 'script_ready',
   PANEL_READY: 'panel_ready',

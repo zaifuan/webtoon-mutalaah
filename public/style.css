@@ -809,6 +809,108 @@ select.field-input {
   line-height: 1.5;
 }
 
+/* --- Fasa 3: Senarai & kad babak --- */
+.scene-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.scene-card {
+  background: linear-gradient(180deg, var(--paper) 0%, var(--paper-edge) 100%);
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px;
+}
+
+.scene-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.scene-no {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.badge--scene {
+  background: rgba(47, 143, 134, 0.15);
+  border-color: rgba(47, 143, 134, 0.45);
+  color: #1d6a62;
+}
+
+.scene-ar {
+  margin-top: 10px;
+  font-family: var(--arabic);
+  font-size: 1.45rem;
+  line-height: 1.5;
+  color: var(--teal);
+}
+
+.scene-ms {
+  margin-top: 4px;
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 1.02rem;
+  color: var(--text);
+}
+
+.scene-summary {
+  margin-top: 8px;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.scene-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 12px;
+}
+
+.meta-item {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.meta-key {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.scene-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.code-chip {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: #1d6a62;
+  background: #cdeae5;
+  border-radius: 5px;
+  padding: 3px 8px;
+}
+
+.scene-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+}
+
 /* --- Fokus papan kekunci --- */
 :focus-visible {
   outline: 2px solid var(--gold);

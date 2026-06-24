@@ -96,6 +96,24 @@ const api = {
   },
   deleteCharacter(charId) {
     return this.req('DELETE', '/api/characters/' + charId);
+  },
+  listScenes(id) {
+    return this.req('GET', '/api/projects/' + id + '/scenes');
+  },
+  generateScenes(id) {
+    return this.req('POST', '/api/projects/' + id + '/generate-scenes', {});
+  },
+  addScene(id, payload) {
+    return this.req('POST', '/api/projects/' + id + '/scenes', payload);
+  },
+  updateScene(sceneId, payload) {
+    return this.req('PUT', '/api/scenes/' + sceneId, payload);
+  },
+  deleteScene(sceneId) {
+    return this.req('DELETE', '/api/scenes/' + sceneId);
+  },
+  reorderScenes(id, sceneIds) {
+    return this.req('POST', '/api/projects/' + id + '/scenes/reorder', { scene_ids: sceneIds });
   }
 };
 
@@ -139,6 +157,23 @@ function facePolicyLabel(f) {
 }
 function charTypeBadge(t) {
   return el('span', { class: 'badge badge--' + (t || 'ordinary_character'), text: charTypeLabel(t) });
+}
+
+// ---- Label babak ----------------------------------------------------------
+const SCENE_TYPE_LABELS = {
+  intro: 'Pengenalan',
+  journey: 'Perjalanan',
+  meeting: 'Pertemuan',
+  lesson: 'Pengajaran',
+  event: 'Peristiwa',
+  reveal: 'Pendedahan',
+  ending: 'Penutup'
+};
+function sceneTypeLabel(t) {
+  return SCENE_TYPE_LABELS[t] || t || '—';
+}
+function codeChip(code) {
+  return el('span', { class: 'code-chip', text: code });
 }
 
 // ---- Utiliti ---------------------------------------------------------------
@@ -418,26 +453,32 @@ async function renderDetail(id) {
     project.description ? el('p', { class: 'detail-desc', text: project.description }) : null
   ]));
 
-  // Tab bar: TEKS | WATAK
+  // Tab bar: TEKS | WATAK | BABAK
   const tabTeks = el('button', { class: 'tab is-active', type: 'button', text: 'Teks' });
   const tabWatak = el('button', { class: 'tab', type: 'button', text: 'Watak' });
+  const tabBabak = el('button', { class: 'tab', type: 'button', text: 'Babak' });
   const content = el('div', { class: 'tab-content' });
 
   function setTab(name) {
+    tabTeks.className = 'tab';
+    tabWatak.className = 'tab';
+    tabBabak.className = 'tab';
     if (name === 'watak') {
       tabWatak.className = 'tab is-active';
-      tabTeks.className = 'tab';
       renderCharacterTab(id, content, updateStatus);
+    } else if (name === 'babak') {
+      tabBabak.className = 'tab is-active';
+      renderSceneTab(id, content, updateStatus);
     } else {
       tabTeks.className = 'tab is-active';
-      tabWatak.className = 'tab';
       renderTextTab(id, content, updateStatus);
     }
   }
   tabTeks.addEventListener('click', function () { setTab('teks'); });
   tabWatak.addEventListener('click', function () { setTab('watak'); });
+  tabBabak.addEventListener('click', function () { setTab('babak'); });
 
-  view.appendChild(el('div', { class: 'tabs' }, [tabTeks, tabWatak]));
+  view.appendChild(el('div', { class: 'tabs' }, [tabTeks, tabWatak, tabBabak]));
   view.appendChild(content);
   setTab('teks');
 }
@@ -692,6 +733,209 @@ function openCharacterDelete(c, updateStatus, reload) {
             if (r && r.project) updateStatus(r.project.status);
             closeModal();
             toast('Watak dipadam', 'ok');
+            reload();
+          } catch (err) {
+            b.disabled = false;
+            b.textContent = 'Padam';
+            toast(err.message, 'error');
+          }
+        }
+      })
+    ])
+  ]);
+  openModal(card);
+}
+
+// ---- Tab: Babak -----------------------------------------------------------
+async function renderSceneTab(id, container, updateStatus) {
+  container.innerHTML = '';
+  container.appendChild(el('p', { class: 'muted', text: 'Memuatkan babak…' }));
+
+  let scenes;
+  try {
+    scenes = await api.listScenes(id);
+  } catch (err) {
+    container.innerHTML = '';
+    container.appendChild(el('p', { class: 'error-text', text: 'Gagal memuatkan babak: ' + err.message }));
+    return;
+  }
+  container.innerHTML = '';
+
+  function reload() { renderSceneTab(id, container, updateStatus); }
+
+  const genBtn = el('button', { class: 'btn btn-primary', type: 'button', text: 'Jana babak' });
+  genBtn.addEventListener('click', async function () {
+    genBtn.disabled = true;
+    genBtn.textContent = 'Menjana…';
+    try {
+      const r = await api.generateScenes(id);
+      if (r && r.project) updateStatus(r.project.status);
+      const made = (r && typeof r.created === 'number') ? r.created : 0;
+      const detected = (r && r.detected) || 0;
+      if (detected === 0) toast('Tiada babak dikenali daripada teks', 'info');
+      else toast(made > 0 ? ('Dijana ' + made + ' babak') : 'Semua babak sudah wujud', 'ok');
+      reload();
+    } catch (err) {
+      genBtn.disabled = false;
+      genBtn.textContent = 'Jana babak';
+      toast(err.message, 'error');
+    }
+  });
+
+  const addBtn = el('button', { class: 'btn btn-ghost', type: 'button', text: 'Tambah babak' });
+  addBtn.addEventListener('click', function () { openSceneForm(id, null, scenes, updateStatus, reload); });
+
+  container.appendChild(el('div', { class: 'char-toolbar' }, [genBtn, addBtn]));
+
+  if (!scenes.length) {
+    container.appendChild(el('div', { class: 'empty' }, [
+      el('p', { class: 'empty-ar', lang: 'ar', dir: 'rtl', text: 'لا مشاهد بعد' }),
+      el('p', { class: 'empty-title', text: 'Belum ada babak' }),
+      el('p', { class: 'empty-text', text: 'Tekan “Jana babak” untuk memecahkan teks kepada babak. Pastikan teks dan watak sudah disediakan dahulu.' })
+    ]));
+    return;
+  }
+
+  const list = el('div', { class: 'scene-list' });
+  scenes.forEach(function (s) { list.appendChild(sceneCard(s, scenes, updateStatus, reload)); });
+  container.appendChild(list);
+}
+
+function sceneCard(s, scenes, updateStatus, reload) {
+  const codes = Array.isArray(s.characters_json) ? s.characters_json : [];
+  return el('div', { class: 'scene-card' }, [
+    el('div', { class: 'scene-top' }, [
+      el('span', { class: 'scene-no', text: 'Babak ' + s.scene_no }),
+      el('span', { class: 'badge badge--scene', text: sceneTypeLabel(s.scene_type) })
+    ]),
+    s.title_ar ? el('p', { class: 'scene-ar', lang: 'ar', dir: 'rtl', text: s.title_ar }) : null,
+    s.title_ms ? el('p', { class: 'scene-ms', text: s.title_ms }) : null,
+    s.summary_ms ? el('p', { class: 'scene-summary', text: s.summary_ms }) : null,
+    el('div', { class: 'scene-meta' }, [
+      s.location ? el('span', { class: 'meta-item' }, [el('span', { class: 'meta-key', text: 'Lokasi: ' }), s.location]) : null,
+      s.mood ? el('span', { class: 'meta-item' }, [el('span', { class: 'meta-key', text: 'Mood: ' }), s.mood]) : null,
+      el('span', { class: 'meta-item' }, [el('span', { class: 'meta-key', text: 'Halaman: ' }), String(s.estimated_pages || 1)])
+    ]),
+    codes.length ? el('div', { class: 'scene-chips' }, codes.map(codeChip)) : null,
+    el('div', { class: 'scene-actions' }, [
+      el('button', { class: 'btn btn-ghost btn-sm', type: 'button', onClick: function () { openSceneForm(s.project_id, s, scenes, updateStatus, reload); }, text: 'Edit' }),
+      el('button', { class: 'btn btn-danger btn-sm', type: 'button', onClick: function () { openSceneDelete(s, updateStatus, reload); }, text: 'Padam' })
+    ])
+  ]);
+}
+
+// ---- Borang babak (tambah / edit) ----------------------------------------
+function openSceneForm(projectId, existing, scenes, updateStatus, reload) {
+  const isEdit = !!existing;
+  let nextNo = 1;
+  (scenes || []).forEach(function (s) { if (s.scene_no >= nextNo) nextNo = s.scene_no + 1; });
+
+  const sceneNo = el('input', { class: 'field-input', type: 'number', min: '1', value: isEdit ? String(existing.scene_no) : String(nextNo) });
+  const titleAr = el('input', { class: 'field-input field-input--ar', type: 'text', dir: 'rtl', lang: 'ar', placeholder: 'العنوان بالعربية', value: isEdit ? (existing.title_ar || '') : '' });
+  const titleMs = el('input', { class: 'field-input', type: 'text', placeholder: 'cth. Musa bertemu Khidir', value: isEdit ? (existing.title_ms || '') : '' });
+  const summary = el('textarea', { class: 'field-input', rows: '2', placeholder: 'Ringkasan babak' });
+  summary.value = isEdit ? (existing.summary_ms || '') : '';
+  const mood = el('input', { class: 'field-input', type: 'text', placeholder: 'cth. tenang, penuh adab', value: isEdit ? (existing.mood || '') : '' });
+  const location = el('input', { class: 'field-input field-input--ar', type: 'text', dir: 'rtl', lang: 'ar', placeholder: 'cth. مجمع البحرين', value: isEdit ? (existing.location || '') : '' });
+  const sourceHint = el('input', { class: 'field-input', type: 'text', placeholder: 'Petunjuk sumber (pilihan)', value: isEdit ? (existing.source_hint || '') : '' });
+  const chars = el('input', { class: 'field-input field-input--mono', type: 'text', placeholder: 'MUSA_001, KHIDR_001', value: (isEdit && Array.isArray(existing.characters_json)) ? existing.characters_json.join(', ') : '' });
+  const pages = el('input', { class: 'field-input', type: 'number', min: '1', max: '20', value: isEdit ? String(existing.estimated_pages || 1) : '1' });
+
+  const typeOpts = [['intro', 'Pengenalan'], ['journey', 'Perjalanan'], ['meeting', 'Pertemuan'], ['lesson', 'Pengajaran'], ['event', 'Peristiwa'], ['reveal', 'Pendedahan'], ['ending', 'Penutup']];
+  const typeSelect = el('select', { class: 'field-input' }, typeOpts.map(function (o) {
+    const opt = el('option', { value: o[0] }, o[1]);
+    if (isEdit && existing.scene_type === o[0]) opt.selected = true;
+    return opt;
+  }));
+
+  const errLine = el('p', { class: 'form-error', hidden: true });
+
+  const form = el('form', {
+    class: 'modal-form',
+    onSubmit: async function (e) {
+      e.preventDefault();
+      const noVal = parseInt(sceneNo.value, 10);
+      if (!Number.isInteger(noVal) || noVal < 1) { errLine.textContent = 'Nombor babak mesti nombor positif.'; errLine.hidden = false; return; }
+      const pagesVal = parseInt(pages.value, 10);
+      if (!Number.isInteger(pagesVal) || pagesVal < 1 || pagesVal > 20) { errLine.textContent = 'Anggaran halaman mesti antara 1 dan 20.'; errLine.hidden = false; return; }
+      if (!titleAr.value.trim() && !titleMs.value.trim()) { errLine.textContent = 'Sila isi sekurang-kurangnya satu tajuk.'; errLine.hidden = false; return; }
+      const charArr = chars.value.split(',').map(function (x) { return x.trim(); }).filter(function (x) { return x.length > 0; });
+      const payload = {
+        scene_no: noVal,
+        title_ar: titleAr.value.trim(),
+        title_ms: titleMs.value.trim(),
+        summary_ms: summary.value.trim(),
+        mood: mood.value.trim(),
+        location: location.value.trim(),
+        source_hint: sourceHint.value.trim(),
+        characters_json: charArr,
+        scene_type: typeSelect.value,
+        estimated_pages: pagesVal
+      };
+      const submit = form.querySelector('.btn-primary');
+      submit.disabled = true;
+      submit.textContent = 'Menyimpan…';
+      try {
+        if (isEdit) {
+          await api.updateScene(existing.id, payload);
+          toast('Babak dikemas kini', 'ok');
+        } else {
+          const r = await api.addScene(projectId, payload);
+          if (r && r.project) updateStatus(r.project.status);
+          toast('Babak ditambah', 'ok');
+        }
+        closeModal();
+        reload();
+      } catch (err) {
+        submit.disabled = false;
+        submit.textContent = isEdit ? 'Simpan' : 'Tambah';
+        errLine.textContent = err.message;
+        errLine.hidden = false;
+      }
+    }
+  }, [
+    el('h2', { class: 'modal-title', text: isEdit ? 'Edit babak' : 'Tambah babak' }),
+    el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Nombor babak' }), sceneNo]),
+    el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Tajuk (Arab)' }), titleAr]),
+    el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Tajuk (Melayu)' }), titleMs]),
+    el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Ringkasan' }), summary]),
+    el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Jenis babak' }), typeSelect]),
+    el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Mood' }), mood]),
+    el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Lokasi' }), location]),
+    el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Watak (kod, dipisah koma)' }), chars]),
+    el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Anggaran halaman (1–20)' }), pages]),
+    el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Petunjuk sumber' }), sourceHint]),
+    errLine,
+    el('div', { class: 'modal-actions' }, [
+      el('button', { class: 'btn btn-ghost', type: 'button', onClick: closeModal, text: 'Batal' }),
+      el('button', { class: 'btn btn-primary', type: 'submit', text: isEdit ? 'Simpan' : 'Tambah' })
+    ])
+  ]);
+
+  openModal(el('div', { class: 'modal-card' }, form));
+}
+
+function openSceneDelete(s, updateStatus, reload) {
+  const card = el('div', { class: 'modal-card' }, [
+    el('h2', { class: 'modal-title', text: 'Padam babak?' }),
+    el('p', { class: 'modal-text' }, [
+      'Babak ',
+      el('strong', { text: '#' + s.scene_no + ' ' + (s.title_ms || s.title_ar || '') }),
+      ' akan dipadam. Tindakan ini tidak boleh dibatalkan.'
+    ]),
+    el('div', { class: 'modal-actions' }, [
+      el('button', { class: 'btn btn-ghost', type: 'button', onClick: closeModal, text: 'Batal' }),
+      el('button', {
+        class: 'btn btn-danger', type: 'button', text: 'Padam',
+        onClick: async function (e) {
+          const b = e.currentTarget;
+          b.disabled = true;
+          b.textContent = 'Memadam…';
+          try {
+            const r = await api.deleteScene(s.id);
+            if (r && r.project) updateStatus(r.project.status);
+            closeModal();
+            toast('Babak dipadam', 'ok');
             reload();
           } catch (err) {
             b.disabled = false;
