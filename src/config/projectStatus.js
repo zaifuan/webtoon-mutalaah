@@ -13,6 +13,7 @@ const PROJECT_STATUS = Object.freeze({
   STORYBOARD_READY: 'storyboard_ready',
   SCRIPT_READY: 'script_ready',
   PANEL_READY: 'panel_ready',
+  VISUAL_READY: 'visual_ready',
   IMAGE_PROMPT_READY: 'image_prompt_ready',
   IMAGE_GENERATED: 'image_generated',
   PUBLISHED: 'published'

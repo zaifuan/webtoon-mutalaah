@@ -1053,6 +1053,83 @@ select.field-input {
   color: var(--text);
 }
 
+/* --- Fasa 5: Tab Visual --- */
+.visual-card {
+  background: linear-gradient(180deg, var(--paper) 0%, var(--paper-edge) 100%);
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+.visual-missing {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  border: 1.5px dashed rgba(215, 166, 74, 0.4);
+  border-radius: var(--radius);
+}
+
+.visual-missing .muted {
+  padding: 0;
+  flex: 1;
+}
+
+.badge--face-noble {
+  background: rgba(215, 166, 74, 0.18);
+  border-color: rgba(215, 166, 74, 0.55);
+  color: #8a6a1f;
+}
+
+.badge--face-normal {
+  background: #e6e3da;
+  border-color: rgba(107, 102, 85, 0.35);
+  color: #5c5743;
+}
+
+.vis-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.vis-tag {
+  font-size: 0.74rem;
+  color: var(--text);
+  background: rgba(28, 34, 51, 0.05);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 3px 8px;
+}
+
+.vis-tag-key {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.panel-notes--plain {
+  color: var(--muted);
+  background: rgba(28, 34, 51, 0.05);
+  border-left-color: var(--line);
+}
+
+.modal-sub {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 0.74rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--teal);
+  margin: 14px 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px dashed var(--line);
+}
+
 /* --- Fokus papan kekunci --- */
 :focus-visible {
   outline: 2px solid var(--gold);
