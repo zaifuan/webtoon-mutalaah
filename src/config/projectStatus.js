@@ -14,6 +14,7 @@ const PROJECT_STATUS = Object.freeze({
   SCRIPT_READY: 'script_ready',
   PANEL_READY: 'panel_ready',
   VISUAL_READY: 'visual_ready',
+  PROMPT_READY: 'prompt_ready',
   IMAGE_PROMPT_READY: 'image_prompt_ready',
   IMAGE_GENERATED: 'image_generated',
   PUBLISHED: 'published'

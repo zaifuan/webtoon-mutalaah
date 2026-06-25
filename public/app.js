@@ -156,6 +156,21 @@ const api = {
   },
   deleteVisual(visualId) {
     return this.req('DELETE', '/api/visuals/' + visualId);
+  },
+  listProjectPrompts(id) {
+    return this.req('GET', '/api/projects/' + id + '/prompts');
+  },
+  generateAllPrompts(id) {
+    return this.req('POST', '/api/projects/' + id + '/generate-prompts', {});
+  },
+  generatePanelPrompt(panelId) {
+    return this.req('POST', '/api/panels/' + panelId + '/generate-prompt', {});
+  },
+  updatePrompt(promptId, payload) {
+    return this.req('PUT', '/api/prompts/' + promptId, payload);
+  },
+  deletePrompt(promptId) {
+    return this.req('DELETE', '/api/prompts/' + promptId);
   }
 };
 
@@ -542,12 +557,13 @@ async function renderDetail(id) {
     project.description ? el('p', { class: 'detail-desc', text: project.description }) : null
   ]));
 
-  // Tab bar: TEKS | WATAK | BABAK | PANEL | VISUAL
+  // Tab bar: TEKS | WATAK | BABAK | PANEL | VISUAL | PROMPT
   const tabTeks = el('button', { class: 'tab is-active', type: 'button', text: 'Teks' });
   const tabWatak = el('button', { class: 'tab', type: 'button', text: 'Watak' });
   const tabBabak = el('button', { class: 'tab', type: 'button', text: 'Babak' });
   const tabPanel = el('button', { class: 'tab', type: 'button', text: 'Panel' });
   const tabVisual = el('button', { class: 'tab', type: 'button', text: 'Visual' });
+  const tabPrompt = el('button', { class: 'tab', type: 'button', text: 'Prompt' });
   const content = el('div', { class: 'tab-content' });
 
   function setTab(name) {
@@ -556,6 +572,7 @@ async function renderDetail(id) {
     tabBabak.className = 'tab';
     tabPanel.className = 'tab';
     tabVisual.className = 'tab';
+    tabPrompt.className = 'tab';
     if (name === 'watak') {
       tabWatak.className = 'tab is-active';
       renderCharacterTab(id, content, updateStatus);
@@ -568,6 +585,9 @@ async function renderDetail(id) {
     } else if (name === 'visual') {
       tabVisual.className = 'tab is-active';
       renderVisualTab(id, content, updateStatus);
+    } else if (name === 'prompt') {
+      tabPrompt.className = 'tab is-active';
+      renderPromptTab(id, content, updateStatus);
     } else {
       tabTeks.className = 'tab is-active';
       renderTextTab(id, content, updateStatus);
@@ -578,8 +598,9 @@ async function renderDetail(id) {
   tabBabak.addEventListener('click', function () { setTab('babak'); });
   tabPanel.addEventListener('click', function () { setTab('panel'); });
   tabVisual.addEventListener('click', function () { setTab('visual'); });
+  tabPrompt.addEventListener('click', function () { setTab('prompt'); });
 
-  view.appendChild(el('div', { class: 'tabs' }, [tabTeks, tabWatak, tabBabak, tabPanel, tabVisual]));
+  view.appendChild(el('div', { class: 'tabs' }, [tabTeks, tabWatak, tabBabak, tabPanel, tabVisual, tabPrompt]));
   view.appendChild(content);
   setTab('teks');
 }
@@ -1574,6 +1595,253 @@ function openVisualDelete(v, updateStatus, reload) {
             if (r && r.project) updateStatus(r.project.status);
             closeModal();
             toast('Visual dipadam', 'ok');
+            reload();
+          } catch (err) { b.disabled = false; b.textContent = 'Padam'; toast(err.message, 'error'); }
+        }
+      })
+    ])
+  ]);
+  openModal(card);
+}
+
+// ---- Tab: Prompt ----------------------------------------------------------
+const PROMPT_STYLE_LABELS = { webtoon_mutalaah: 'Webtoon Mutalaah' };
+const PROMPT_STATUS_LIST = ['draft', 'ready', 'approved'];
+const PROMPT_STATUS_LABELS = { draft: 'Draf', ready: 'Sedia', approved: 'Diluluskan' };
+
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (e) { /* fallback di bawah */ }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.top = '0';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch (e) { return false; }
+}
+
+async function renderPromptTab(id, container, updateStatus) {
+  container.innerHTML = '';
+  container.appendChild(el('p', { class: 'muted', text: 'Memuatkan prompt…' }));
+
+  let scenes, panels, prompts;
+  try {
+    scenes = await api.listScenes(id);
+    panels = await api.listProjectPanels(id);
+    prompts = await api.listProjectPrompts(id);
+  } catch (err) {
+    container.innerHTML = '';
+    container.appendChild(el('p', { class: 'error-text', text: 'Gagal memuatkan prompt: ' + err.message }));
+    return;
+  }
+  container.innerHTML = '';
+
+  function reload() { renderPromptTab(id, container, updateStatus); }
+
+  const panelsByScene = {};
+  panels.forEach(function (p) {
+    const k = String(p.scene_id);
+    if (!panelsByScene[k]) panelsByScene[k] = [];
+    panelsByScene[k].push(p);
+  });
+  const promptByPanel = {};
+  prompts.forEach(function (pr) { promptByPanel[String(pr.panel_id)] = pr; });
+
+  const genAllBtn = el('button', { class: 'btn btn-primary', type: 'button', text: 'Jana semua Prompt' });
+  genAllBtn.addEventListener('click', async function () {
+    genAllBtn.disabled = true;
+    genAllBtn.textContent = 'Menjana…';
+    try {
+      const r = await api.generateAllPrompts(id);
+      if (r && r.project) updateStatus(r.project.status);
+      const made = (r && typeof r.created === 'number') ? r.created : 0;
+      toast(made > 0 ? ('Dijana ' + made + ' prompt') : 'Semua prompt sudah wujud', 'ok');
+      reload();
+    } catch (err) {
+      genAllBtn.disabled = false;
+      genAllBtn.textContent = 'Jana semua Prompt';
+      toast(err.message, 'error');
+    }
+  });
+  container.appendChild(el('div', { class: 'char-toolbar' }, [genAllBtn]));
+
+  if (!panels.length) {
+    container.appendChild(el('div', { class: 'empty' }, [
+      el('p', { class: 'empty-ar', lang: 'ar', dir: 'rtl', text: 'لا لوحات بعد' }),
+      el('p', { class: 'empty-title', text: 'Belum ada panel' }),
+      el('p', { class: 'empty-text', text: 'Sila jana panel dan visual dahulu sebelum jana prompt.' })
+    ]));
+    return;
+  }
+
+  scenes.forEach(function (s) {
+    const sps = panelsByScene[String(s.id)] || [];
+    if (!sps.length) return;
+    container.appendChild(el('div', { class: 'scene-head' }, [
+      el('div', { class: 'scene-head-titles' }, [
+        el('span', { class: 'scene-head-no', text: 'Babak ' + s.scene_no }),
+        s.title_ms ? el('span', { class: 'scene-head-ms', text: s.title_ms }) : null
+      ])
+    ]));
+
+    sps.forEach(function (p) {
+      const pr = promptByPanel[String(p.id)];
+      if (pr) {
+        container.appendChild(promptCard(p, pr, updateStatus, reload));
+      } else {
+        const gb = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', text: 'Jana prompt' });
+        gb.addEventListener('click', async function () {
+          gb.disabled = true; gb.textContent = 'Menjana…';
+          try {
+            const r = await api.generatePanelPrompt(p.id);
+            if (r && r.project) updateStatus(r.project.status);
+            toast('Prompt dijana', 'ok');
+            reload();
+          } catch (err) { gb.disabled = false; gb.textContent = 'Jana prompt'; toast(err.message, 'error'); }
+        });
+        container.appendChild(el('div', { class: 'visual-missing' }, [
+          el('span', { class: 'panel-no', text: 'Panel ' + p.panel_no }),
+          el('span', { class: 'muted', text: 'belum ada prompt' }),
+          gb
+        ]));
+      }
+    });
+  });
+}
+
+function promptCard(panel, pr, updateStatus, reload) {
+  const ptArea = el('textarea', { class: 'field-input prompt-text', rows: '6', readonly: 'readonly' });
+  ptArea.value = pr.prompt_text || '';
+  const negArea = el('textarea', { class: 'field-input prompt-negative', rows: '3', readonly: 'readonly' });
+  negArea.value = pr.negative_prompt || '';
+
+  const copyBtn = el('button', { class: 'btn btn-primary btn-sm', type: 'button', text: 'Copy Prompt' });
+  copyBtn.addEventListener('click', async function () {
+    const ok = await copyText(pr.prompt_text || '');
+    if (ok) { toast('Prompt disalin', 'ok'); }
+    else { ptArea.focus(); ptArea.select(); toast('Tekan & tahan untuk salin', 'error'); }
+  });
+  const copyNegBtn = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', text: 'Copy Negative' });
+  copyNegBtn.addEventListener('click', async function () {
+    const ok = await copyText(pr.negative_prompt || '');
+    if (ok) { toast('Negative disalin', 'ok'); }
+    else { negArea.focus(); negArea.select(); toast('Tekan & tahan untuk salin', 'error'); }
+  });
+
+  return el('div', { class: 'prompt-card' }, [
+    el('div', { class: 'panel-top' }, [
+      el('span', { class: 'panel-no', text: 'Panel ' + panel.panel_no }),
+      el('span', { class: 'badge badge--status-' + (pr.status || 'draft'), text: PROMPT_STATUS_LABELS[pr.status] || pr.status }),
+      el('span', { class: 'badge badge--preset', text: PROMPT_STYLE_LABELS[pr.style_preset] || pr.style_preset }),
+      el('span', { class: 'prompt-ver', text: pr.prompt_version || 'v1' })
+    ]),
+    el('label', { class: 'prompt-field-label', text: 'Prompt' }),
+    ptArea,
+    el('label', { class: 'prompt-field-label', text: 'Negative prompt' }),
+    negArea,
+    el('div', { class: 'scene-actions' }, [
+      copyBtn,
+      copyNegBtn,
+      el('button', { class: 'btn btn-ghost btn-sm', type: 'button', onClick: function () { openPromptForm(pr, updateStatus, reload); }, text: 'Edit' }),
+      el('button', { class: 'btn btn-danger btn-sm', type: 'button', onClick: function () { openPromptDelete(pr, updateStatus, reload); }, text: 'Padam' })
+    ])
+  ]);
+}
+
+// ---- Borang prompt (edit) -------------------------------------------------
+function openPromptForm(pr, updateStatus, reload) {
+  const styleSel = el('select', { class: 'field-input' }, Object.keys(PROMPT_STYLE_LABELS).map(function (k) {
+    const o = el('option', { value: k }, PROMPT_STYLE_LABELS[k]);
+    if (pr.style_preset === k) o.selected = true;
+    return o;
+  }));
+  const statusSel = el('select', { class: 'field-input' }, PROMPT_STATUS_LIST.map(function (k) {
+    const o = el('option', { value: k }, PROMPT_STATUS_LABELS[k]);
+    if (pr.status === k) o.selected = true;
+    return o;
+  }));
+  const verInput = el('input', { class: 'field-input', type: 'text', value: pr.prompt_version || 'v1' });
+  const langInput = el('input', { class: 'field-input', type: 'text', value: pr.language || 'en' });
+  const ptArea = el('textarea', { class: 'field-input prompt-text', rows: '8' });
+  ptArea.value = pr.prompt_text || '';
+  const negArea = el('textarea', { class: 'field-input prompt-negative', rows: '4' });
+  negArea.value = pr.negative_prompt || '';
+
+  const errLine = el('p', { class: 'form-error', hidden: true });
+  function fieldRow(a, b) { return el('div', { class: 'field-row' }, [a, b]); }
+  function field(label, node) { return el('label', { class: 'field' }, [el('span', { class: 'field-label', text: label }), node]); }
+
+  const form = el('form', {
+    class: 'modal-form',
+    onSubmit: async function (e) {
+      e.preventDefault();
+      if (!ptArea.value.trim()) { errLine.textContent = 'Prompt tidak boleh kosong.'; errLine.hidden = false; return; }
+      if (!negArea.value.trim()) { errLine.textContent = 'Negative prompt tidak boleh kosong.'; errLine.hidden = false; return; }
+      const payload = {
+        prompt_text: ptArea.value.trim(),
+        negative_prompt: negArea.value.trim(),
+        style_preset: styleSel.value,
+        status: statusSel.value,
+        prompt_version: verInput.value.trim() || 'v1',
+        language: langInput.value.trim() || 'en'
+      };
+      const submit = form.querySelector('.btn-primary');
+      submit.disabled = true; submit.textContent = 'Menyimpan…';
+      try {
+        await api.updatePrompt(pr.id, payload);
+        toast('Prompt dikemas kini', 'ok');
+        closeModal();
+        reload();
+      } catch (err) {
+        submit.disabled = false; submit.textContent = 'Simpan';
+        errLine.textContent = err.message; errLine.hidden = false;
+      }
+    }
+  }, [
+    el('h2', { class: 'modal-title', text: 'Edit prompt' }),
+    el('p', { class: 'modal-sub', text: 'Tetapan' }),
+    fieldRow(field('Style preset', styleSel), field('Status', statusSel)),
+    fieldRow(field('Versi', verInput), field('Bahasa', langInput)),
+    el('p', { class: 'modal-sub', text: 'Kandungan' }),
+    field('Prompt', ptArea),
+    field('Negative prompt', negArea),
+    el('p', { class: 'modal-hint', text: 'Nota: arahan tokoh mulia (cahaya/tanpa wajah) akan dikuatkuasakan automatik.' }),
+    errLine,
+    el('div', { class: 'modal-actions' }, [
+      el('button', { class: 'btn btn-ghost', type: 'button', onClick: closeModal, text: 'Batal' }),
+      el('button', { class: 'btn btn-primary', type: 'submit', text: 'Simpan' })
+    ])
+  ]);
+
+  openModal(el('div', { class: 'modal-card' }, form));
+}
+
+function openPromptDelete(pr, updateStatus, reload) {
+  const card = el('div', { class: 'modal-card' }, [
+    el('h2', { class: 'modal-title', text: 'Padam prompt?' }),
+    el('p', { class: 'modal-text', text: 'Prompt imej bagi panel ini akan dipadam. Tindakan ini tidak boleh dibatalkan.' }),
+    el('div', { class: 'modal-actions' }, [
+      el('button', { class: 'btn btn-ghost', type: 'button', onClick: closeModal, text: 'Batal' }),
+      el('button', {
+        class: 'btn btn-danger', type: 'button', text: 'Padam',
+        onClick: async function (e) {
+          const b = e.currentTarget; b.disabled = true; b.textContent = 'Memadam…';
+          try {
+            const r = await api.deletePrompt(pr.id);
+            if (r && r.project) updateStatus(r.project.status);
+            closeModal();
+            toast('Prompt dipadam', 'ok');
             reload();
           } catch (err) { b.disabled = false; b.textContent = 'Padam'; toast(err.message, 'error'); }
         }

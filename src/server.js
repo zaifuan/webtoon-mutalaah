@@ -12,6 +12,7 @@ const charactersRouter = require('./routes/characters');
 const scenesRouter = require('./routes/scenes');
 const panelsRouter = require('./routes/panels');
 const visualsRouter = require('./routes/visuals');
+const promptsRouter = require('./routes/prompts');
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -49,6 +50,10 @@ app.use('/api', panelsRouter);
 // Fasa 5 — visual director engine. Dipasang pada /api kerana ia merangkumi
 // /projects/:id/visuals, /panels/:id/visual, /visuals/:id, dll.
 app.use('/api', visualsRouter);
+
+// Fasa 6 — image prompt engine. Dipasang pada /api kerana ia merangkumi
+// /projects/:id/prompts, /panels/:id/generate-prompt, /prompts/:id, dll.
+app.use('/api', promptsRouter);
 
 // Apa-apa laluan /api/* yang tidak dikenali → 404 JSON yang kemas.
 app.use('/api', (req, res) => {

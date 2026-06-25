@@ -1130,6 +1130,82 @@ select.field-input {
   border-bottom: 1px dashed var(--line);
 }
 
+/* --- Fasa 6: Tab Prompt --- */
+.prompt-card {
+  background: linear-gradient(180deg, var(--paper) 0%, var(--paper-edge) 100%);
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+.prompt-field-label {
+  display: block;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 12px 0 5px;
+}
+
+.prompt-text,
+.prompt-negative {
+  width: 100%;
+  resize: vertical;
+  line-height: 1.5;
+  font-size: 0.85rem;
+}
+
+.prompt-negative {
+  color: #7a3b3b;
+  background: rgba(176, 58, 58, 0.06);
+}
+
+.badge--status-draft {
+  background: #e6e3da;
+  border-color: rgba(107, 102, 85, 0.35);
+  color: #5c5743;
+}
+
+.badge--status-ready {
+  background: rgba(47, 143, 134, 0.16);
+  border-color: rgba(47, 143, 134, 0.5);
+  color: #1f6b63;
+}
+
+.badge--status-approved {
+  background: rgba(215, 166, 74, 0.2);
+  border-color: rgba(215, 166, 74, 0.55);
+  color: #8a6a1f;
+}
+
+.badge--preset {
+  background: rgba(28, 34, 51, 0.06);
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+.prompt-ver {
+  margin-left: auto;
+  font-family: var(--display);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.modal-hint {
+  font-size: 0.74rem;
+  color: var(--muted);
+  background: rgba(47, 143, 134, 0.08);
+  border-left: 3px solid var(--teal);
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin: 4px 0 0;
+}
+
 /* --- Fokus papan kekunci --- */
 :focus-visible {
   outline: 2px solid var(--gold);
