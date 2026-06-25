@@ -523,8 +523,11 @@ router.post('/panels/:id/scripts/reorder', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'script_ids mesti sepadan dengan semua skrip panel ini' });
     }
 
-    // script_order tiada UNIQUE berasingan selain (panel_id, script_order);
-    // tindih terus kerana setiap ID unik dalam panel ini.
+    // Dua fasa untuk mengelak langgar UNIQUE(panel_id, script_order):
+    // Fasa 1 — alih SEMUA script_order panel ini ke julat sementara (+100000)
+    //          dalam satu pernyataan supaya tiada pertindihan.
+    await client.query('UPDATE scripts SET script_order = script_order + 100000 WHERE panel_id = $1', [id]);
+    // Fasa 2 — tetapkan script_order & reading_order mengikut urutan akhir (1..n).
     for (var j = 0; j < orderIds.length; j++) {
       await client.query('UPDATE scripts SET script_order = $1, reading_order = $1 WHERE id = $2 AND panel_id = $3', [j + 1, orderIds[j], id]);
     }

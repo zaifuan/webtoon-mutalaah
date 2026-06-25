@@ -1318,6 +1318,104 @@ select.field-input {
   color: #1f6b63;
 }
 
+/* --- Fasa 7B: Tab Review (QA) --- */
+.rv-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.rv-title {
+  font-family: var(--display);
+  font-size: 1.05rem;
+  margin: 0;
+}
+
+.rv-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.rv-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 6px;
+  background: linear-gradient(180deg, var(--paper) 0%, var(--paper-edge) 100%);
+  border: 1.5px solid var(--ink);
+  border-radius: var(--radius);
+}
+
+.rv-stat-val { font-family: var(--display); font-weight: 700; font-size: 1.05rem; color: var(--text); }
+.rv-stat-key { font-size: 0.66rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.rv-stat--ready { border-color: rgba(47, 143, 134, 0.6); }
+.rv-stat--ready .rv-stat-val { color: #1f6b63; }
+.rv-stat--error { border-color: rgba(176, 58, 58, 0.6); background: rgba(176, 58, 58, 0.06); }
+.rv-stat--error .rv-stat-val { color: #b03a3a; }
+.rv-stat--warning { border-color: rgba(215, 166, 74, 0.65); background: rgba(215, 166, 74, 0.08); }
+.rv-stat--warning .rv-stat-val { color: #8a6a1f; }
+
+.rv-filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.rv-filter {
+  font-family: var(--display); font-size: 0.78rem; font-weight: 600;
+  padding: 6px 12px; border: 1.5px solid var(--line); border-radius: 999px;
+  background: transparent; color: var(--muted); cursor: pointer;
+}
+.rv-filter.is-active { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+.rv-cards { display: flex; flex-direction: column; gap: 12px; }
+
+.rv-card {
+  background: linear-gradient(180deg, var(--paper) 0%, var(--paper-edge) 100%);
+  border: 2px solid var(--ink);
+  border-left-width: 5px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px;
+}
+.rv-card--ok { border-left-color: #2f8f86; }
+.rv-card--warning { border-left-color: #d7a64a; }
+.rv-card--error { border-left-color: #b03a3a; }
+
+.rv-card-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rv-card-title { font-family: var(--display); font-weight: 700; }
+.rv-card-sub { margin: 4px 0 0; font-size: 0.82rem; color: var(--muted); }
+
+.rv-badge { font-size: 0.7rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; border: 1px solid; }
+.rv-badge--ok { background: rgba(47, 143, 134, 0.16); border-color: rgba(47, 143, 134, 0.5); color: #1f6b63; }
+.rv-badge--warning { background: rgba(215, 166, 74, 0.2); border-color: rgba(215, 166, 74, 0.55); color: #8a6a1f; }
+.rv-badge--error { background: rgba(176, 58, 58, 0.14); border-color: rgba(176, 58, 58, 0.5); color: #b03a3a; }
+.rv-ready { margin-left: auto; font-size: 0.68rem; font-weight: 700; color: #1f6b63; border: 1px dashed rgba(47, 143, 134, 0.5); border-radius: 5px; padding: 2px 7px; }
+
+.rv-checklist { display: flex; flex-wrap: wrap; gap: 5px; margin: 12px 0; }
+.rv-check { font-size: 0.72rem; padding: 3px 8px; border-radius: 5px; border: 1px solid var(--line); display: inline-flex; align-items: center; gap: 4px; }
+.rv-check-mark { font-weight: 700; }
+.rv-check--pass { background: rgba(47, 143, 134, 0.1); border-color: rgba(47, 143, 134, 0.4); color: #1f6b63; }
+.rv-check--fail { background: rgba(176, 58, 58, 0.07); border-color: rgba(176, 58, 58, 0.35); color: #9a4040; }
+
+.rv-issues { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.rv-issue { font-size: 0.8rem; padding: 6px 9px; border-radius: 5px; border-left: 3px solid; }
+.rv-issue--error { background: rgba(176, 58, 58, 0.07); border-left-color: #b03a3a; color: #8a3232; }
+.rv-issue--warning { background: rgba(215, 166, 74, 0.1); border-left-color: #d7a64a; color: #80631d; }
+
+.rv-section { margin-top: 10px; }
+.rv-section-h { font-family: var(--display); font-weight: 700; font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--teal); margin: 0 0 6px; }
+.rv-scripts { display: flex; flex-direction: column; gap: 4px; }
+.rv-script-line { font-size: 0.84rem; line-height: 1.45; }
+.rv-script-head { font-weight: 700; color: var(--muted); margin-right: 6px; }
+.rv-muted { font-size: 0.8rem; color: var(--muted); margin: 0; }
+.rv-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+
+@media (max-width: 380px) {
+  .rv-summary { grid-template-columns: repeat(2, 1fr); }
+}
+
 /* --- Fokus papan kekunci --- */
 :focus-visible {
   outline: 2px solid var(--gold);

@@ -138,6 +138,10 @@ async function syncVisualStatus(client, projectId) {
       next = PROJECT_STATUS.VISUAL_READY;
     }
   } else if (cur === PROJECT_STATUS.VISUAL_READY) {
+    // Pipeline: panel_ready -> script_ready -> visual_ready. Apabila semua
+    // visual dipadam, surut ke script_ready jika skrip masih wujud, jika tidak
+    // ke panel_ready (atau lebih awal mengikut data sedia ada).
+    const scr = await client.query('SELECT count(*)::int AS n FROM scripts WHERE project_id = $1', [projectId]);
     const pc = await client.query('SELECT count(*)::int AS n FROM panels WHERE project_id = $1', [projectId]);
     const sc = await client.query('SELECT count(*)::int AS n FROM scenes WHERE project_id = $1', [projectId]);
     const ch = await client.query('SELECT count(*)::int AS n FROM characters WHERE project_id = $1', [projectId]);
@@ -145,7 +149,8 @@ async function syncVisualStatus(client, projectId) {
       "SELECT 1 FROM texts WHERE project_id = $1 AND original_ar IS NOT NULL AND length(btrim(original_ar)) > 0",
       [projectId]
     );
-    if (pc.rows[0].n >= 1) next = PROJECT_STATUS.PANEL_READY;
+    if (scr.rows[0].n >= 1) next = PROJECT_STATUS.SCRIPT_READY;
+    else if (pc.rows[0].n >= 1) next = PROJECT_STATUS.PANEL_READY;
     else if (sc.rows[0].n >= 1) next = PROJECT_STATUS.SCENE_READY;
     else if (ch.rows[0].n >= 1) next = PROJECT_STATUS.CHARACTER_READY;
     else if (tx.rows.length > 0) next = PROJECT_STATUS.TEXT_READY;

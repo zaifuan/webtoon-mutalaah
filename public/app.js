@@ -196,8 +196,17 @@ const api = {
   },
   reorderScripts(panelId, scriptIds) {
     return this.req('POST', '/api/panels/' + panelId + '/scripts/reorder', { script_ids: scriptIds });
+  },
+  getProjectReview(id) {
+    return this.req('GET', '/api/projects/' + id + '/review');
+  },
+  getPanelReview(panelId) {
+    return this.req('GET', '/api/panels/' + panelId + '/review');
   }
 };
+
+// Penukar tab semasa projek (diset oleh renderDetail) — untuk butang "Pergi ke".
+let activeSetTab = null;
 
 // ---- Status ---------------------------------------------------------------
 const STATUS_LABELS = {
@@ -623,7 +632,7 @@ async function renderDetail(id) {
     project.description ? el('p', { class: 'detail-desc', text: project.description }) : null
   ]));
 
-  // Tab bar: TEKS | WATAK | BABAK | PANEL | SCRIPT | VISUAL | PROMPT
+  // Tab bar: TEKS | WATAK | BABAK | PANEL | SCRIPT | VISUAL | PROMPT | REVIEW
   const tabTeks = el('button', { class: 'tab is-active', type: 'button', text: 'Teks' });
   const tabWatak = el('button', { class: 'tab', type: 'button', text: 'Watak' });
   const tabBabak = el('button', { class: 'tab', type: 'button', text: 'Babak' });
@@ -631,6 +640,7 @@ async function renderDetail(id) {
   const tabScript = el('button', { class: 'tab', type: 'button', text: 'Script' });
   const tabVisual = el('button', { class: 'tab', type: 'button', text: 'Visual' });
   const tabPrompt = el('button', { class: 'tab', type: 'button', text: 'Prompt' });
+  const tabReview = el('button', { class: 'tab', type: 'button', text: 'Review' });
   const content = el('div', { class: 'tab-content' });
 
   function setTab(name) {
@@ -641,6 +651,7 @@ async function renderDetail(id) {
     tabScript.className = 'tab';
     tabVisual.className = 'tab';
     tabPrompt.className = 'tab';
+    tabReview.className = 'tab';
     if (name === 'watak') {
       tabWatak.className = 'tab is-active';
       renderCharacterTab(id, content, updateStatus);
@@ -659,11 +670,16 @@ async function renderDetail(id) {
     } else if (name === 'prompt') {
       tabPrompt.className = 'tab is-active';
       renderPromptTab(id, content, updateStatus);
+    } else if (name === 'review') {
+      tabReview.className = 'tab is-active';
+      renderReviewTab(id, content, updateStatus);
     } else {
       tabTeks.className = 'tab is-active';
       renderTextTab(id, content, updateStatus);
     }
   }
+  // Disimpan supaya kad Review boleh "Pergi ke" tab lain.
+  activeSetTab = setTab;
   tabTeks.addEventListener('click', function () { setTab('teks'); });
   tabWatak.addEventListener('click', function () { setTab('watak'); });
   tabBabak.addEventListener('click', function () { setTab('babak'); });
@@ -671,8 +687,9 @@ async function renderDetail(id) {
   tabScript.addEventListener('click', function () { setTab('script'); });
   tabVisual.addEventListener('click', function () { setTab('visual'); });
   tabPrompt.addEventListener('click', function () { setTab('prompt'); });
+  tabReview.addEventListener('click', function () { setTab('review'); });
 
-  view.appendChild(el('div', { class: 'tabs' }, [tabTeks, tabWatak, tabBabak, tabPanel, tabScript, tabVisual, tabPrompt]));
+  view.appendChild(el('div', { class: 'tabs' }, [tabTeks, tabWatak, tabBabak, tabPanel, tabScript, tabVisual, tabPrompt, tabReview]));
   view.appendChild(content);
   setTab('teks');
 }
@@ -2268,6 +2285,202 @@ function openScriptDelete(s, updateStatus, reload) {
     ])
   ]);
   openModal(card);
+}
+
+// ---- Tab: Review (QA, read-only) ------------------------------------------
+const QA_LABEL = { ok: 'OK', warning: 'Warning', error: 'Error' };
+const CHECKLIST_FIELDS = [
+  ['character', 'Character'], ['script', 'Script'], ['visual', 'Visual'],
+  ['prompt', 'Prompt'], ['face_policy', 'Face'], ['location', 'Location'],
+  ['caption', 'Caption'], ['dialogue', 'Dialogue'], ['prompt_complete', 'Prompt Lengkap']
+];
+
+async function exportReview(id, btn) {
+  const old = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Mengeksport…';
+  try {
+    const res = await fetch('/api/projects/' + id + '/review/export', { headers: { Accept: 'application/json' } });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const text = await res.text();
+    const blob = new Blob([text], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'qa-report-project-' + id + '.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+    toast('Laporan QA dimuat turun', 'ok');
+  } catch (e) { toast('Gagal eksport: ' + e.message, 'error'); }
+  btn.disabled = false; btn.textContent = old;
+}
+
+function reviewStat(label, value, cls) {
+  return el('div', { class: 'rv-stat' + (cls ? ' ' + cls : '') }, [
+    el('span', { class: 'rv-stat-val', text: String(value) }),
+    el('span', { class: 'rv-stat-key', text: label })
+  ]);
+}
+
+function reviewSummaryBox(sm) {
+  const p = sm.panels || 0;
+  return el('div', { class: 'rv-summary' }, [
+    reviewStat('Watak', sm.characters + '/' + sm.characters),
+    reviewStat('Babak', sm.scenes + '/' + sm.scenes),
+    reviewStat('Panel', p + '/' + p),
+    reviewStat('Skrip', sm.scripts + '/' + p),
+    reviewStat('Visual', sm.visuals + '/' + p),
+    reviewStat('Prompt', sm.prompts + '/' + p),
+    reviewStat('Sedia Imej', (sm.ready_for_image || 0) + '/' + p, 'rv-stat--ready'),
+    reviewStat('Errors', sm.error || 0, (sm.error ? 'rv-stat--error' : '')),
+    reviewStat('Warnings', sm.warning || 0, (sm.warning ? 'rv-stat--warning' : ''))
+  ]);
+}
+
+function reviewCard(item) {
+  const st = item.qa_status;
+  const checklist = el('div', { class: 'rv-checklist' }, CHECKLIST_FIELDS.map(function (f) {
+    const ok = !!(item.checklist && item.checklist[f[0]]);
+    return el('span', { class: 'rv-check ' + (ok ? 'rv-check--pass' : 'rv-check--fail') },
+      [el('span', { class: 'rv-check-mark', text: ok ? '✓' : '✗' }), f[1]]);
+  }));
+
+  const issues = (item.issues && item.issues.length)
+    ? el('ul', { class: 'rv-issues' }, item.issues.map(function (is) {
+        return el('li', { class: 'rv-issue rv-issue--' + is.type }, is.message);
+      }))
+    : null;
+
+  // Script preview
+  const rows = Array.isArray(item.scripts) ? item.scripts : [];
+  const scriptPrev = rows.length
+    ? el('div', { class: 'rv-scripts' }, rows.map(function (s) {
+        const who = s.speaker_name || s.speaker_code || (s.script_type === 'dialogue' ? '?' : '');
+        const head = '[' + (s.script_type || '') + ']' + (who ? ' ' + who : '');
+        return el('div', { class: 'rv-script-line' }, [
+          el('span', { class: 'rv-script-head', text: head }),
+          el('span', { class: 'rv-script-text', text: s.text_ms || s.text_ar || '—' })
+        ]);
+      }))
+    : el('p', { class: 'rv-muted', text: 'Tiada skrip (fallback dibenarkan).' });
+
+  // Visual summary
+  const v = item.visual;
+  const visualPrev = v
+    ? el('div', { class: 'vis-tags' }, [
+        ['Shot', v.shot], ['Angle', v.angle], ['Lens', v.lens], ['Lighting', v.lighting],
+        ['Composition', v.composition], ['Atmosphere', v.atmosphere], ['Weather', v.weather],
+        ['Depth', v.depth], ['Focus', v.focus], ['Palette', v.color_palette], ['Face', v.face_policy]
+      ].map(function (t) {
+        return el('span', { class: 'vis-tag' }, [el('span', { class: 'vis-tag-key', text: t[0] + ': ' }), (t[1] ? pretty(t[1]) : '—')]);
+      }))
+    : el('p', { class: 'rv-muted', text: 'Tiada visual.' });
+
+  // Prompt preview
+  const pr = item.prompt;
+  let promptPrev;
+  const actions = [];
+  if (pr) {
+    const ptArea = el('textarea', { class: 'field-input prompt-text', rows: '4', readonly: 'readonly' });
+    ptArea.value = pr.prompt_text || '';
+    const negArea = el('textarea', { class: 'field-input prompt-negative', rows: '2', readonly: 'readonly' });
+    negArea.value = pr.negative_prompt || '';
+    promptPrev = el('div', {}, [
+      el('label', { class: 'prompt-field-label', text: 'Prompt' }), ptArea,
+      el('label', { class: 'prompt-field-label', text: 'Negative prompt' }), negArea
+    ]);
+    const copyP = el('button', { class: 'btn btn-primary btn-sm', type: 'button', text: 'Copy Prompt' });
+    copyP.addEventListener('click', async function () {
+      const ok = await copyText(pr.prompt_text || ''); if (ok) toast('Prompt disalin', 'ok'); else { ptArea.focus(); ptArea.select(); }
+    });
+    const copyN = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', text: 'Copy Negative' });
+    copyN.addEventListener('click', async function () {
+      const ok = await copyText(pr.negative_prompt || ''); if (ok) toast('Negative disalin', 'ok'); else { negArea.focus(); negArea.select(); }
+    });
+    actions.push(copyP, copyN);
+  } else {
+    promptPrev = el('p', { class: 'rv-muted', text: 'Tiada prompt.' });
+  }
+
+  function goBtn(label, tab) {
+    const b = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', text: label });
+    b.addEventListener('click', function () { if (activeSetTab) activeSetTab(tab); });
+    return b;
+  }
+  actions.push(goBtn('Pergi ke Script', 'script'), goBtn('Pergi ke Visual', 'visual'), goBtn('Pergi ke Prompt', 'prompt'));
+
+  return el('div', { class: 'rv-card rv-card--' + st }, [
+    el('div', { class: 'rv-card-top' }, [
+      el('span', { class: 'rv-card-title', text: 'Babak ' + (item.scene_no || '–') + ' · Panel ' + item.panel_no }),
+      el('span', { class: 'rv-badge rv-badge--' + st, text: QA_LABEL[st] || st }),
+      item.ready_for_image ? el('span', { class: 'rv-ready', text: 'Sedia Imej' }) : null
+    ]),
+    item.scene_title ? el('p', { class: 'rv-card-sub', text: item.scene_title }) : null,
+    checklist,
+    issues,
+    el('div', { class: 'rv-section' }, [el('p', { class: 'rv-section-h', text: 'Script' }), scriptPrev]),
+    el('div', { class: 'rv-section' }, [el('p', { class: 'rv-section-h', text: 'Visual' }), visualPrev]),
+    el('div', { class: 'rv-section' }, [el('p', { class: 'rv-section-h', text: 'Prompt' }), promptPrev]),
+    el('div', { class: 'rv-actions' }, actions)
+  ]);
+}
+
+async function renderReviewTab(id, container, updateStatus) {
+  container.innerHTML = '';
+  container.appendChild(el('p', { class: 'muted', text: 'Menyemak pipeline…' }));
+
+  let data;
+  try {
+    data = await api.getProjectReview(id);
+  } catch (err) {
+    container.innerHTML = '';
+    container.appendChild(el('p', { class: 'error-text', text: 'Gagal memuatkan review: ' + err.message }));
+    return;
+  }
+  container.innerHTML = '';
+
+  const items = (data && data.items) || [];
+  const summary = (data && data.summary) || {};
+
+  // Summary + Export
+  const exportBtn = el('button', { class: 'btn btn-primary', type: 'button', text: 'Export QA Report' });
+  exportBtn.addEventListener('click', function () { exportReview(id, exportBtn); });
+  container.appendChild(el('div', { class: 'rv-head' }, [
+    el('h2', { class: 'rv-title', text: 'Review & QA' }),
+    exportBtn
+  ]));
+  container.appendChild(reviewSummaryBox(summary));
+
+  // Filter
+  let filter = 'all';
+  const cardsWrap = el('div', { class: 'rv-cards' });
+  const filterDefs = [['all', 'Semua'], ['error', 'Error'], ['warning', 'Warning'], ['ok', 'Lulus']];
+  const filterBtns = {};
+  function applyFilter() {
+    filterDefs.forEach(function (f) { filterBtns[f[0]].className = 'rv-filter' + (filter === f[0] ? ' is-active' : ''); });
+    cardsWrap.innerHTML = '';
+    const shown = items.filter(function (it) { return filter === 'all' || it.qa_status === filter; });
+    if (!shown.length) {
+      cardsWrap.appendChild(el('p', { class: 'rv-muted', text: 'Tiada panel dalam kategori ini.' }));
+      return;
+    }
+    shown.forEach(function (it) { cardsWrap.appendChild(reviewCard(it)); });
+  }
+  const filterBar = el('div', { class: 'rv-filters' }, filterDefs.map(function (f) {
+    const b = el('button', { class: 'rv-filter', type: 'button', text: f[1] });
+    b.addEventListener('click', function () { filter = f[0]; applyFilter(); });
+    filterBtns[f[0]] = b;
+    return b;
+  }));
+  container.appendChild(filterBar);
+  container.appendChild(cardsWrap);
+
+  if (!items.length) {
+    cardsWrap.appendChild(el('div', { class: 'empty' }, [
+      el('p', { class: 'empty-title', text: 'Belum ada panel' }),
+      el('p', { class: 'empty-text', text: 'Sila jana panel, skrip, visual dan prompt dahulu.' })
+    ]));
+    return;
+  }
+  applyFilter();
 }
 
 // ---- Router ---------------------------------------------------------------
