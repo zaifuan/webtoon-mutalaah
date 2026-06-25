@@ -1273,6 +1273,51 @@ select.field-input {
   color: var(--line);
 }
 
+/* --- Enjin Skrip (Fasa 7) — pengurusan penuh --- */
+/* .script-card kini menjadi blok panel yang mengandungi tindakan + senarai item. */
+.script-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.script-item {
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--teal);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+
+.script-item .panel-top {
+  margin-bottom: 6px;
+}
+
+.script-item-no {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 0.86rem;
+  color: var(--text);
+}
+
+.script-item .script-row {
+  border-top: 1px dashed var(--line);
+}
+
+/* Skrip item dalam kad panel perlu sedikit ruang antara bahagian. */
+.script-card > .scene-head-actions {
+  margin: 8px 0 4px;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.badge--ok {
+  background: rgba(47, 143, 134, 0.18);
+  border-color: rgba(47, 143, 134, 0.5);
+  color: #1f6b63;
+}
+
 /* --- Fokus papan kekunci --- */
 :focus-visible {
   outline: 2px solid var(--gold);

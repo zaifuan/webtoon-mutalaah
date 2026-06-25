@@ -171,6 +171,31 @@ const api = {
   },
   deletePrompt(promptId) {
     return this.req('DELETE', '/api/prompts/' + promptId);
+  },
+  // ---- Script (Fasa 7) ----------------------------------------------------
+  listProjectScripts(id) {
+    return this.req('GET', '/api/projects/' + id + '/scripts');
+  },
+  listPanelScripts(panelId) {
+    return this.req('GET', '/api/panels/' + panelId + '/scripts');
+  },
+  generateAllScripts(id) {
+    return this.req('POST', '/api/projects/' + id + '/generate-scripts', {});
+  },
+  generatePanelScripts(panelId) {
+    return this.req('POST', '/api/panels/' + panelId + '/generate-scripts', {});
+  },
+  addScript(panelId, payload) {
+    return this.req('POST', '/api/panels/' + panelId + '/scripts', payload);
+  },
+  updateScript(scriptId, payload) {
+    return this.req('PUT', '/api/scripts/' + scriptId, payload);
+  },
+  deleteScript(scriptId) {
+    return this.req('DELETE', '/api/scripts/' + scriptId);
+  },
+  reorderScripts(panelId, scriptIds) {
+    return this.req('POST', '/api/panels/' + panelId + '/scripts/reorder', { script_ids: scriptIds });
   }
 };
 
@@ -255,6 +280,47 @@ const SHOT_TYPE_LABELS = {
 };
 function panelTypeLabel(t) { return PANEL_TYPE_LABELS[t] || t || '—'; }
 function shotTypeLabel(t) { return SHOT_TYPE_LABELS[t] || t || '—'; }
+
+// ---- Label script (Fasa 7) ------------------------------------------------
+const SCRIPT_TYPE_LABELS = {
+  narration: 'Naratif',
+  dialogue: 'Dialog',
+  thought: 'Fikiran',
+  dua: 'Doa',
+  sfx: 'SFX',
+  caption: 'Kapsyen',
+  reaction: 'Reaksi'
+};
+const BUBBLE_TYPE_LABELS = {
+  speech: 'Bualan',
+  thought: 'Fikiran',
+  narration: 'Naratif',
+  dua: 'Doa',
+  sfx: 'SFX',
+  caption: 'Kapsyen',
+  none: 'Tiada'
+};
+const SCRIPT_EMOTION_LABELS = {
+  neutral: 'Neutral',
+  calm: 'Tenang',
+  solemn: 'Khidmat',
+  sad: 'Sedih',
+  happy: 'Gembira',
+  angry: 'Marah',
+  fear: 'Takut',
+  surprised: 'Terkejut',
+  thinking: 'Berfikir',
+  respectful: 'Hormat',
+  wonder: 'Kagum'
+};
+const SCRIPT_STATUS_LABELS = {
+  draft: 'Draf',
+  approved: 'Dilulus'
+};
+function scriptTypeLabel(t) { return SCRIPT_TYPE_LABELS[t] || t || '—'; }
+function bubbleTypeLabel(t) { return BUBBLE_TYPE_LABELS[t] || t || '—'; }
+function scriptEmotionLabel(t) { return SCRIPT_EMOTION_LABELS[t] || t || '—'; }
+function scriptStatusLabel(t) { return SCRIPT_STATUS_LABELS[t] || t || '—'; }
 
 // ---- Visual Director: kamus enum (untuk select) & paparan -----------------
 const VISUAL_ENUMS = {
@@ -1857,33 +1923,22 @@ function openPromptDelete(pr, updateStatus, reload) {
   openModal(card);
 }
 
-// ---- Tab: Script (pratonton; enjin penuh pada Fasa 7) ---------------------
+// ---- Tab: Script (Fasa 7 — pengurusan penuh) ------------------------------
 function scriptAsArray(v) {
   if (Array.isArray(v)) return v;
   if (typeof v === 'string') { try { return JSON.parse(v); } catch (e) { return []; } }
   return [];
-}
-function scriptFirstMood(mood) {
-  if (!mood) return '';
-  return String(mood).split(',')[0].trim() || '';
-}
-function scriptPickSpeaker(codes, typeMap) {
-  const nonGroup = codes.filter(function (c) { return !/_GROUP$/.test(c); });
-  if (!nonGroup.length) return '';
-  for (var i = 0; i < nonGroup.length; i++) {
-    if (typeMap[nonGroup[i]] === 'noble_figure_no_face') return nonGroup[i];
-  }
-  return nonGroup[0];
 }
 
 async function renderScriptTab(id, container, updateStatus) {
   container.innerHTML = '';
   container.appendChild(el('p', { class: 'muted', text: 'Memuatkan skrip…' }));
 
-  let scenes, panels, characters;
+  let scenes, panels, scripts, characters;
   try {
     scenes = await api.listScenes(id);
     panels = await api.listProjectPanels(id);
+    scripts = await api.listProjectScripts(id);
     characters = await api.listCharacters(id);
   } catch (err) {
     container.innerHTML = '';
@@ -1892,9 +1947,13 @@ async function renderScriptTab(id, container, updateStatus) {
   }
   container.innerHTML = '';
 
-  const typeMap = {};
-  characters.forEach(function (c) { if (c.character_code) typeMap[c.character_code] = c.character_type; });
+  function reload() { renderScriptTab(id, container, updateStatus); }
 
+  // Peta kod watak -> nama Melayu (untuk pilihan penutur borang).
+  const codeNameMap = {};
+  characters.forEach(function (c) { if (c.character_code) codeNameMap[c.character_code] = c.name_ms || c.character_code; });
+
+  // Susun panel mengikut scene_no / panel_order.
   const panelsByScene = {};
   panels.forEach(function (p) {
     const k = String(p.scene_id);
@@ -1902,67 +1961,313 @@ async function renderScriptTab(id, container, updateStatus) {
     panelsByScene[k].push(p);
   });
 
+  // Kumpulkan skrip mengikut panel_id.
+  const scriptsByPanel = {};
+  scripts.forEach(function (s) {
+    const k = String(s.panel_id);
+    if (!scriptsByPanel[k]) scriptsByPanel[k] = [];
+    scriptsByPanel[k].push(s);
+  });
+
+  // --- Bar alat: jana semua skrip -----------------------------------------
+  const genAllBtn = el('button', { class: 'btn btn-primary', type: 'button', text: 'Jana semua Script' });
+  genAllBtn.addEventListener('click', async function () {
+    genAllBtn.disabled = true;
+    genAllBtn.textContent = 'Menjana…';
+    try {
+      const r = await api.generateAllScripts(id);
+      if (r && r.project) updateStatus(r.project.status);
+      const made = (r && typeof r.created === 'number') ? r.created : 0;
+      toast(made > 0 ? ('Dijana ' + made + ' skrip') : 'Semua skrip sudah wujud', 'ok');
+      reload();
+    } catch (err) {
+      genAllBtn.disabled = false;
+      genAllBtn.textContent = 'Jana semua Script';
+      toast(err.message, 'error');
+    }
+  });
+  container.appendChild(el('div', { class: 'char-toolbar' }, [genAllBtn]));
+
   container.appendChild(el('div', { class: 'script-note' }, [
-    el('p', { class: 'script-note-title', text: 'Pratonton Skrip' }),
-    el('p', { class: 'script-note-text', text: 'Skrip piawai bagi setiap panel — Speaker, Narration, Caption, Dialogue, Thought, SFX, Emotion — kini disediakan automatik daripada data panel dan digunakan oleh Visual Director serta Prompt Engine. Medan Thought dan SFX telah diwujudkan (kosong buat masa ini) untuk Fasa 7. Enjin Skrip penuh (jana, edit, susun) akan dibina pada Fasa 7.' })
+    el('p', { class: 'script-note-title', text: 'Enjin Skrip' }),
+    el('p', { class: 'script-note-text', text: 'Satu panel boleh mempunyai lebih daripada satu skrip (naratif, dialog, fikiran, SFX). Skrip sebenar digunakan oleh Visual Director dan Prompt Engine. Jika panel belum ada skrip, ia akan dijana secara rule-based.' })
   ]));
 
   if (!panels.length) {
     container.appendChild(el('div', { class: 'empty' }, [
       el('p', { class: 'empty-ar', lang: 'ar', dir: 'rtl', text: 'لا نص بعد' }),
       el('p', { class: 'empty-title', text: 'Belum ada panel' }),
-      el('p', { class: 'empty-text', text: 'Sila jana panel dahulu untuk melihat pratonton skrip.' })
+      el('p', { class: 'empty-text', text: 'Sila jana panel dahulu sebelum jana skrip.' })
     ]));
     return;
   }
 
   scenes.forEach(function (s) {
-    const sps = panelsByScene[String(s.id)] || [];
-    if (!sps.length) return;
+    const scenePanels = panelsByScene[String(s.id)] || [];
+    if (!scenePanels.length) return;
+
     container.appendChild(el('div', { class: 'scene-head' }, [
       el('div', { class: 'scene-head-titles' }, [
         el('span', { class: 'scene-head-no', text: 'Babak ' + s.scene_no }),
         s.title_ms ? el('span', { class: 'scene-head-ms', text: s.title_ms }) : null
       ])
     ]));
-    sps.forEach(function (p) { container.appendChild(scriptCard(p, s, typeMap)); });
+
+    scenePanels.forEach(function (p) {
+      const panelScripts = (scriptsByPanel[String(p.id)] || []).slice().sort(function (a, b) {
+        return (a.reading_order || a.script_order || 0) - (b.reading_order || b.script_order || 0);
+      });
+      container.appendChild(scriptPanelBlock(p, panelScripts, codeNameMap, updateStatus, reload));
+    });
   });
 }
 
-function scriptCard(panel, scene, typeMap) {
-  const codes = scriptAsArray(panel.characters_json);
-  // Bentuk skrip PIAWAI (sama seperti scriptSource.js di pelayan).
-  const script = {
-    speaker: scriptPickSpeaker(codes, typeMap) || '',
-    narration: panel.visual_ms || panel.action_ms || '',
-    caption: panel.caption_ms || '',
-    dialogue: panel.dialogue_ms || '',
-    thought: '',
-    sfx: '',
-    emotion: panel.emotion_ms || scriptFirstMood(scene && scene.mood) || ''
-  };
+// Blok skrip bagi satu panel: tajuk + butang + senarai item skrip.
+function scriptPanelBlock(panel, scripts, codeNameMap, updateStatus, reload) {
+  const list = el('div', { class: 'script-list' });
 
-  function row(key, value) {
-    const has = value !== null && value !== undefined && String(value).trim() !== '';
-    return el('div', { class: 'script-row' }, [
-      el('span', { class: 'script-key', text: key }),
-      el('span', { class: 'script-val' + (has ? '' : ' script-val--empty'), text: has ? String(value) : '—' })
-    ]);
+  const genBtn = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', text: 'Jana Script panel ini' });
+  genBtn.addEventListener('click', async function () {
+    genBtn.disabled = true;
+    genBtn.textContent = 'Menjana…';
+    try {
+      const r = await api.generatePanelScripts(panel.id);
+      if (r && r.project) updateStatus(r.project.status);
+      const made = (r && typeof r.created === 'number') ? r.created : 0;
+      toast(made > 0 ? ('Dijana ' + made + ' skrip') : 'Skrip panel sudah wujud', 'ok');
+      reload();
+    } catch (err) {
+      genBtn.disabled = false;
+      genBtn.textContent = 'Jana Script panel ini';
+      toast(err.message, 'error');
+    }
+  });
+
+  const addBtn = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', text: '+ Skrip' });
+  addBtn.addEventListener('click', function () { openScriptForm(panel.id, null, scripts, codeNameMap, updateStatus, reload); });
+
+  const reorderBtn = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', text: 'Susun semula' });
+  reorderBtn.disabled = scripts.length < 2;
+  reorderBtn.addEventListener('click', function () {
+    // Susun semula terus mengikut urutan semasa (membetulkan script_order/reading_order).
+    const ids = scripts.map(function (s) { return s.id; });
+    api.reorderScripts(panel.id, ids).then(function () {
+      toast('Susunan dikemas kini', 'ok');
+      reload();
+    }).catch(function (err) { toast(err.message, 'error'); });
+  });
+
+  if (!scripts.length) {
+    list.appendChild(el('p', { class: 'muted panel-empty', text: 'Belum ada skrip. Klik "Jana Script panel ini" atau "+ Skrip".' }));
+  } else {
+    scripts.forEach(function (s) { list.appendChild(scriptItemCard(panel.id, s, scripts, codeNameMap, updateStatus, reload)); });
   }
 
   return el('div', { class: 'script-card' }, [
     el('div', { class: 'panel-top' }, [
       el('span', { class: 'panel-no', text: 'Panel ' + panel.panel_no }),
-      el('span', { class: 'badge badge--preset', text: 'auto' })
+      el('span', { class: 'badge badge--panel', text: panelTypeLabel(panel.panel_type) })
     ]),
-    row('Speaker', script.speaker),
-    row('Narration', script.narration),
-    row('Caption', script.caption),
-    row('Dialogue', script.dialogue),
-    row('Thought', script.thought),
-    row('SFX', script.sfx),
-    row('Emotion', script.emotion)
+    el('div', { class: 'scene-head-actions' }, [genBtn, addBtn, reorderBtn]),
+    list
   ]);
+}
+
+// Kad bagi satu item skrip (satu baris dalam jadual scripts).
+function scriptItemCard(panelId, s, panelScripts, codeNameMap, updateStatus, reload) {
+  function row(key, value, ar) {
+    const has = value !== null && value !== undefined && String(value).trim() !== '';
+    const valNode = el('span', { class: 'script-val' + (has ? '' : ' script-val--empty'), text: has ? String(value) : '—' });
+    if (ar) { valNode.dir = 'rtl'; valNode.lang = 'ar'; }
+    return el('div', { class: 'script-row' }, [
+      el('span', { class: 'script-key', text: key }),
+      valNode
+    ]);
+  }
+
+  const head = el('div', { class: 'panel-top' }, [
+    el('span', { class: 'script-item-no', text: '#' + s.script_order }),
+    el('span', { class: 'badge badge--preset', text: scriptTypeLabel(s.script_type) }),
+    s.status === 'approved' ? el('span', { class: 'badge badge--ok', text: scriptStatusLabel(s.status) }) : null
+  ]);
+
+  return el('div', { class: 'script-item' }, [
+    head,
+    s.speaker_code ? row('Penutur', s.speaker_name ? (s.speaker_name + ' (' + s.speaker_code + ')') : s.speaker_code) : null,
+    s.text_ar ? row('Teks (Arab)', s.text_ar, true) : null,
+    s.text_ms ? row('Teks (Melayu)', s.text_ms) : null,
+    el('div', { class: 'scene-meta' }, [
+      el('span', { class: 'meta-item' }, [el('span', { class: 'meta-key', text: 'Gelembung: ' }), bubbleTypeLabel(s.bubble_type)]),
+      el('span', { class: 'meta-item' }, [el('span', { class: 'meta-key', text: 'Emosi: ' }), scriptEmotionLabel(s.emotion)]),
+      el('span', { class: 'meta-item' }, [el('span', { class: 'meta-key', text: 'Bacaan: ' }), String(s.reading_order || s.script_order)])
+    ]),
+    s.notes ? el('p', { class: 'panel-notes', text: s.notes }) : null,
+    el('div', { class: 'scene-actions' }, [
+      el('button', { class: 'btn btn-ghost btn-sm', type: 'button', onClick: function () { openScriptForm(panelId, s, panelScripts, codeNameMap, updateStatus, reload); }, text: 'Edit' }),
+      el('button', { class: 'btn btn-danger btn-sm', type: 'button', onClick: function () { openScriptDelete(s, updateStatus, reload); }, text: 'Padam' })
+    ])
+  ]);
+}
+
+// --- Borang skrip (tambah / edit) -----------------------------------------
+function openScriptForm(panelId, existing, panelScripts, codeNameMap, updateStatus, reload) {
+  const isEdit = !!existing;
+  let nextOrder = 1;
+  (panelScripts || []).forEach(function (s) { if (s.script_order >= nextOrder) nextOrder = s.script_order + 1; });
+
+  const orderIn = el('input', { class: 'field-input', type: 'number', min: '1', value: isEdit ? String(existing.script_order) : String(nextOrder) });
+  const readIn = el('input', { class: 'field-input', type: 'number', min: '1', value: isEdit ? String(existing.reading_order || existing.script_order) : String(nextOrder) });
+
+  const typeOpts = [['narration', 'Naratif'], ['dialogue', 'Dialog'], ['thought', 'Fikiran'], ['dua', 'Doa'], ['sfx', 'SFX'], ['caption', 'Kapsyen'], ['reaction', 'Reaksi']];
+  const typeSelect = el('select', { class: 'field-input' }, typeOpts.map(function (o) {
+    const opt = el('option', { value: o[0] }, o[1]);
+    if (isEdit && existing.script_type === o[0]) opt.selected = true;
+    if (!isEdit && o[0] === 'narration') opt.selected = true;
+    return opt;
+  }));
+  const bubbleOpts = [['speech', 'Bualan'], ['thought', 'Fikiran'], ['narration', 'Naratif'], ['dua', 'Doa'], ['sfx', 'SFX'], ['caption', 'Kapsyen'], ['none', 'Tiada']];
+  const bubbleSelect = el('select', { class: 'field-input' }, bubbleOpts.map(function (o) {
+    const opt = el('option', { value: o[0] }, o[1]);
+    if (isEdit && existing.bubble_type === o[0]) opt.selected = true;
+    return opt;
+  }));
+  const emoOpts = [['neutral', 'Neutral'], ['calm', 'Tenang'], ['solemn', 'Khidmat'], ['sad', 'Sedih'], ['happy', 'Gembira'], ['angry', 'Marah'], ['fear', 'Takut'], ['surprised', 'Terkejut'], ['thinking', 'Berfikir'], ['respectful', 'Hormat'], ['wonder', 'Kagum']];
+  const emoSelect = el('select', { class: 'field-input' }, emoOpts.map(function (o) {
+    const opt = el('option', { value: o[0] }, o[1]);
+    if (isEdit && existing.emotion === o[0]) opt.selected = true;
+    return opt;
+  }));
+  const statusOpts = [['draft', 'Draf'], ['approved', 'Dilulus']];
+  const statusSelect = el('select', { class: 'field-input' }, statusOpts.map(function (o) {
+    const opt = el('option', { value: o[0] }, o[1]);
+    if (isEdit && existing.status === o[0]) opt.selected = true;
+    if (!isEdit && o[0] === 'draft') opt.selected = true;
+    return opt;
+  }));
+
+  // Penutur: senarai kod watak + input bebas.
+  const codeKeys = Object.keys(codeNameMap).sort();
+  const speakerCode = el('input', { class: 'field-input field-input--mono', type: 'text', placeholder: 'cth. MUSA_001', value: isEdit ? (existing.speaker_code || '') : '' });
+  const speakerName = el('input', { class: 'field-input', type: 'text', placeholder: 'Nama penutur (cth. Nabi Musa)', value: isEdit ? (existing.speaker_name || '') : '' });
+  let speakerDatalist = null;
+  if (codeKeys.length) {
+    speakerDatalist = el('datalist', { id: 'speaker-codes' }, codeKeys.map(function (c) {
+      return el('option', { value: c }, codeNameMap[c]);
+    }));
+    speakerCode.setAttribute('list', 'speaker-codes');
+  }
+
+  const textAr = el('textarea', { class: 'field-input field-input--ar', rows: '2', dir: 'rtl', lang: 'ar', placeholder: 'النص بالعربية' });
+  textAr.value = isEdit ? (existing.text_ar || '') : '';
+  const textMs = el('textarea', { class: 'field-input', rows: '2', placeholder: 'Teks (Melayu)' });
+  textMs.value = isEdit ? (existing.text_ms || '') : '';
+  const notes = el('input', { class: 'field-input', type: 'text', placeholder: 'Nota (pilihan)', value: isEdit ? (existing.notes || '') : '' });
+
+  const errLine = el('p', { class: 'form-error', hidden: true });
+
+  const form = el('form', {
+    class: 'modal-form',
+    onSubmit: async function (e) {
+      e.preventDefault();
+      const orderVal = parseInt(orderIn.value, 10);
+      if (!Number.isInteger(orderVal) || orderVal < 1) { errLine.textContent = 'Susunan skrip mesti nombor positif.'; errLine.hidden = false; return; }
+      const readVal = parseInt(readIn.value, 10);
+      if (!Number.isInteger(readVal) || readVal < 1) { errLine.textContent = 'Susunan bacaan mesti nombor positif.'; errLine.hidden = false; return; }
+      const ar = textAr.value.trim();
+      const ms = textMs.value.trim();
+      if (!ar && !ms) { errLine.textContent = 'Sekurang-kurangnya teks Arab atau Melayu mesti diisi.'; errLine.hidden = false; return; }
+      const payload = {
+        script_order: orderVal,
+        reading_order: readVal,
+        script_type: typeSelect.value,
+        bubble_type: bubbleSelect.value,
+        emotion: emoSelect.value,
+        status: statusSelect.value,
+        speaker_code: speakerCode.value.trim(),
+        speaker_name: speakerName.value.trim(),
+        text_ar: ar,
+        text_ms: ms,
+        notes: notes.value.trim()
+      };
+      const submit = form.querySelector('.btn-primary');
+      submit.disabled = true;
+      submit.textContent = 'Menyimpan…';
+      try {
+        if (isEdit) {
+          await api.updateScript(existing.id, payload);
+          toast('Skrip dikemas kini', 'ok');
+        } else {
+          const r = await api.addScript(panelId, payload);
+          if (r && r.project) updateStatus(r.project.status);
+          toast('Skrip ditambah', 'ok');
+        }
+        closeModal();
+        reload();
+      } catch (err) {
+        submit.disabled = false;
+        submit.textContent = isEdit ? 'Simpan' : 'Tambah';
+        errLine.textContent = err.message;
+        errLine.hidden = false;
+      }
+    }
+  }, [
+    el('h2', { class: 'modal-title', text: isEdit ? 'Edit skrip' : 'Tambah skrip' }),
+    el('div', { class: 'field-row' }, [
+      el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Susunan (script_order)' }), orderIn]),
+      el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Susunan bacaan' }), readIn])
+    ]),
+    el('div', { class: 'field-row' }, [
+      el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Jenis skrip' }), typeSelect]),
+      el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Jenis gelembung' }), bubbleSelect])
+    ]),
+    el('div', { class: 'field-row' }, [
+      el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Emosi' }), emoSelect]),
+      el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Status' }), statusSelect])
+    ]),
+    el('div', { class: 'field-row' }, [
+      el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Kod penutur' }), speakerCode]),
+      el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Nama penutur' }), speakerName])
+    ]),
+    speakerDatalist,
+    el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Teks (Arab)' }), textAr]),
+    el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Teks (Melayu)' }), textMs]),
+    el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Nota' }), notes]),
+    errLine,
+    el('div', { class: 'modal-actions' }, [
+      el('button', { class: 'btn btn-ghost', type: 'button', onClick: closeModal, text: 'Batal' }),
+      el('button', { class: 'btn btn-primary', type: 'submit', text: isEdit ? 'Simpan' : 'Tambah' })
+    ])
+  ]);
+
+  openModal(el('div', { class: 'modal-card' }, form));
+}
+
+function openScriptDelete(s, updateStatus, reload) {
+  const card = el('div', { class: 'modal-card' }, [
+    el('h2', { class: 'modal-title', text: 'Padam skrip?' }),
+    el('p', { class: 'modal-text' }, [
+      'Item skrip #',
+      el('strong', { text: String(s.script_order) }),
+      ' (', scriptTypeLabel(s.script_type), ') akan dipadam. Tindakan ini tidak boleh dibatalkan.'
+    ]),
+    el('div', { class: 'modal-actions' }, [
+      el('button', { class: 'btn btn-ghost', type: 'button', onClick: closeModal, text: 'Batal' }),
+      el('button', {
+        class: 'btn btn-danger', type: 'button', text: 'Padam',
+        onClick: async function (e) {
+          const b = e.currentTarget; b.disabled = true; b.textContent = 'Memadam…';
+          try {
+            const r = await api.deleteScript(s.id);
+            if (r && r.project) updateStatus(r.project.status);
+            closeModal();
+            toast('Skrip dipadam', 'ok');
+            reload();
+          } catch (err) { b.disabled = false; b.textContent = 'Padam'; toast(err.message, 'error'); }
+        }
+      })
+    ])
+  ]);
+  openModal(card);
 }
 
 // ---- Router ---------------------------------------------------------------

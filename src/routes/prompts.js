@@ -10,7 +10,7 @@ const {
   isValidStatus, isValidPreset
 } = require('../config/promptStyle');
 const { buildPrompt, enforceNoblePrompt, panelHasNoble } = require('../services/promptEngine');
-const { buildScript } = require('../services/scriptSource');
+const { resolveScript } = require('../services/scriptSource');
 
 const PROMPT_COLUMNS =
   'id, project_id, scene_id, panel_id, prompt_text, negative_prompt, ' +
@@ -86,7 +86,7 @@ function shape(row) {
 }
 
 async function insertPrompt(client, shaped, charMap) {
-  const script = buildScript(shaped.panel, shaped.scene, charMap);
+  const script = await resolveScript(client, shaped.panel, shaped.scene, charMap);
   const p = buildPrompt(shaped.panel, shaped.scene, script, shaped.visual, charMap);
   const ins = await client.query(
     INSERT_HEAD + ' ON CONFLICT (panel_id) DO NOTHING RETURNING id',

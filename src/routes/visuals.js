@@ -7,7 +7,7 @@ const pool = require('../db/pool');
 const { PROJECT_STATUS } = require('../config/projectStatus');
 const { VISUAL_ENUM_FIELDS, LAYOUT_ENUM_FIELDS, isValid } = require('../config/visualDirector');
 const { extractVisual, NOBLE_VISUAL_NOTE } = require('../services/visualEngine');
-const { buildScript } = require('../services/scriptSource');
+const { resolveScript } = require('../services/scriptSource');
 
 const VISUAL_COLUMNS =
   'id, project_id, scene_id, panel_id, camera, shot, angle, lens, composition, ' +
@@ -170,7 +170,7 @@ function panelNorm(row) {
 // Jana visual bagi satu panel dalam transaksi sedia ada (idempotent).
 async function generateForPanel(client, panelRow, scene, charMap) {
   const panel = panelNorm(panelRow);
-  const script = buildScript(panel, scene || {}, charMap);
+  const script = await resolveScript(client, panel, scene || {}, charMap);
   const v = extractVisual(panel, scene || {}, script, charMap);
   const ins = await client.query(
     INSERT_HEAD + ' ON CONFLICT (panel_id) DO NOTHING RETURNING id',

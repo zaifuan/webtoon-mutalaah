@@ -13,6 +13,7 @@ const scenesRouter = require('./routes/scenes');
 const panelsRouter = require('./routes/panels');
 const visualsRouter = require('./routes/visuals');
 const promptsRouter = require('./routes/prompts');
+const scriptsRouter = require('./routes/scripts');
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -54,6 +55,10 @@ app.use('/api', visualsRouter);
 // Fasa 6 — image prompt engine. Dipasang pada /api kerana ia merangkumi
 // /projects/:id/prompts, /panels/:id/generate-prompt, /prompts/:id, dll.
 app.use('/api', promptsRouter);
+
+// Fasa 7 — script engine. Dipasang pada /api kerana ia merangkumi
+// /projects/:id/scripts, /panels/:id/generate-scripts, /scripts/:id, dll.
+app.use('/api', scriptsRouter);
 
 // Apa-apa laluan /api/* yang tidak dikenali → 404 JSON yang kemas.
 app.use('/api', (req, res) => {
