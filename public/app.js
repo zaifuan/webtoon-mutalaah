@@ -114,6 +114,30 @@ const api = {
   },
   reorderScenes(id, sceneIds) {
     return this.req('POST', '/api/projects/' + id + '/scenes/reorder', { scene_ids: sceneIds });
+  },
+  listProjectPanels(id) {
+    return this.req('GET', '/api/projects/' + id + '/panels');
+  },
+  listScenePanels(sceneId) {
+    return this.req('GET', '/api/scenes/' + sceneId + '/panels');
+  },
+  generateAllPanels(id) {
+    return this.req('POST', '/api/projects/' + id + '/generate-panels', {});
+  },
+  generateScenePanels(sceneId) {
+    return this.req('POST', '/api/scenes/' + sceneId + '/generate-panels', {});
+  },
+  addPanel(sceneId, payload) {
+    return this.req('POST', '/api/scenes/' + sceneId + '/panels', payload);
+  },
+  updatePanel(panelId, payload) {
+    return this.req('PUT', '/api/panels/' + panelId, payload);
+  },
+  deletePanel(panelId) {
+    return this.req('DELETE', '/api/panels/' + panelId);
+  },
+  reorderPanels(sceneId, panelIds) {
+    return this.req('POST', '/api/scenes/' + sceneId + '/panels/reorder', { panel_ids: panelIds });
   }
 };
 
@@ -175,6 +199,29 @@ function sceneTypeLabel(t) {
 function codeChip(code) {
   return el('span', { class: 'code-chip', text: code });
 }
+
+// ---- Label panel ----------------------------------------------------------
+const PANEL_TYPE_LABELS = {
+  establishing: 'Pembukaan',
+  character: 'Watak',
+  dialogue: 'Dialog',
+  action: 'Aksi',
+  reaction: 'Reaksi',
+  transition: 'Peralihan',
+  reveal: 'Pendedahan',
+  closing: 'Penutup'
+};
+const SHOT_TYPE_LABELS = {
+  wide: 'Wide',
+  medium: 'Medium',
+  close_up: 'Close-up',
+  over_shoulder: 'Over-shoulder',
+  low_angle: 'Sudut rendah',
+  high_angle: 'Sudut tinggi',
+  detail: 'Detail'
+};
+function panelTypeLabel(t) { return PANEL_TYPE_LABELS[t] || t || '—'; }
+function shotTypeLabel(t) { return SHOT_TYPE_LABELS[t] || t || '—'; }
 
 // ---- Utiliti ---------------------------------------------------------------
 function projectTitle(p) {
@@ -453,22 +500,27 @@ async function renderDetail(id) {
     project.description ? el('p', { class: 'detail-desc', text: project.description }) : null
   ]));
 
-  // Tab bar: TEKS | WATAK | BABAK
+  // Tab bar: TEKS | WATAK | BABAK | PANEL
   const tabTeks = el('button', { class: 'tab is-active', type: 'button', text: 'Teks' });
   const tabWatak = el('button', { class: 'tab', type: 'button', text: 'Watak' });
   const tabBabak = el('button', { class: 'tab', type: 'button', text: 'Babak' });
+  const tabPanel = el('button', { class: 'tab', type: 'button', text: 'Panel' });
   const content = el('div', { class: 'tab-content' });
 
   function setTab(name) {
     tabTeks.className = 'tab';
     tabWatak.className = 'tab';
     tabBabak.className = 'tab';
+    tabPanel.className = 'tab';
     if (name === 'watak') {
       tabWatak.className = 'tab is-active';
       renderCharacterTab(id, content, updateStatus);
     } else if (name === 'babak') {
       tabBabak.className = 'tab is-active';
       renderSceneTab(id, content, updateStatus);
+    } else if (name === 'panel') {
+      tabPanel.className = 'tab is-active';
+      renderPanelTab(id, content, updateStatus);
     } else {
       tabTeks.className = 'tab is-active';
       renderTextTab(id, content, updateStatus);
@@ -477,8 +529,9 @@ async function renderDetail(id) {
   tabTeks.addEventListener('click', function () { setTab('teks'); });
   tabWatak.addEventListener('click', function () { setTab('watak'); });
   tabBabak.addEventListener('click', function () { setTab('babak'); });
+  tabPanel.addEventListener('click', function () { setTab('panel'); });
 
-  view.appendChild(el('div', { class: 'tabs' }, [tabTeks, tabWatak, tabBabak]));
+  view.appendChild(el('div', { class: 'tabs' }, [tabTeks, tabWatak, tabBabak, tabPanel]));
   view.appendChild(content);
   setTab('teks');
 }
@@ -936,6 +989,285 @@ function openSceneDelete(s, updateStatus, reload) {
             if (r && r.project) updateStatus(r.project.status);
             closeModal();
             toast('Babak dipadam', 'ok');
+            reload();
+          } catch (err) {
+            b.disabled = false;
+            b.textContent = 'Padam';
+            toast(err.message, 'error');
+          }
+        }
+      })
+    ])
+  ]);
+  openModal(card);
+}
+
+// ---- Tab: Panel -----------------------------------------------------------
+async function renderPanelTab(id, container, updateStatus) {
+  container.innerHTML = '';
+  container.appendChild(el('p', { class: 'muted', text: 'Memuatkan panel…' }));
+
+  let scenes, panels;
+  try {
+    scenes = await api.listScenes(id);
+    panels = await api.listProjectPanels(id);
+  } catch (err) {
+    container.innerHTML = '';
+    container.appendChild(el('p', { class: 'error-text', text: 'Gagal memuatkan panel: ' + err.message }));
+    return;
+  }
+  container.innerHTML = '';
+
+  function reload() { renderPanelTab(id, container, updateStatus); }
+
+  // Kumpulkan panel mengikut scene_id.
+  const byScene = {};
+  panels.forEach(function (p) {
+    const key = String(p.scene_id);
+    if (!byScene[key]) byScene[key] = [];
+    byScene[key].push(p);
+  });
+
+  const genAllBtn = el('button', { class: 'btn btn-primary', type: 'button', text: 'Jana semua panel' });
+  genAllBtn.addEventListener('click', async function () {
+    genAllBtn.disabled = true;
+    genAllBtn.textContent = 'Menjana…';
+    try {
+      const r = await api.generateAllPanels(id);
+      if (r && r.project) updateStatus(r.project.status);
+      const made = (r && typeof r.created === 'number') ? r.created : 0;
+      toast(made > 0 ? ('Dijana ' + made + ' panel') : 'Semua panel sudah wujud', 'ok');
+      reload();
+    } catch (err) {
+      genAllBtn.disabled = false;
+      genAllBtn.textContent = 'Jana semua panel';
+      toast(err.message, 'error');
+    }
+  });
+  container.appendChild(el('div', { class: 'char-toolbar' }, [genAllBtn]));
+
+  if (!scenes.length) {
+    container.appendChild(el('div', { class: 'empty' }, [
+      el('p', { class: 'empty-ar', lang: 'ar', dir: 'rtl', text: 'لا مشاهد بعد' }),
+      el('p', { class: 'empty-title', text: 'Belum ada babak' }),
+      el('p', { class: 'empty-text', text: 'Sila jana babak dahulu sebelum jana panel.' })
+    ]));
+    return;
+  }
+
+  scenes.forEach(function (s) {
+    const scenePanels = byScene[String(s.id)] || [];
+
+    const genBtn = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', text: 'Jana panel' });
+    genBtn.addEventListener('click', async function () {
+      genBtn.disabled = true;
+      genBtn.textContent = 'Menjana…';
+      try {
+        const r = await api.generateScenePanels(s.id);
+        if (r && r.project) updateStatus(r.project.status);
+        const made = (r && typeof r.created === 'number') ? r.created : 0;
+        toast(made > 0 ? ('Dijana ' + made + ' panel') : 'Panel babak sudah wujud', 'ok');
+        reload();
+      } catch (err) {
+        genBtn.disabled = false;
+        genBtn.textContent = 'Jana panel';
+        toast(err.message, 'error');
+      }
+    });
+    const addBtn = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', text: '+ Panel' });
+    addBtn.addEventListener('click', function () { openPanelForm(s.id, null, scenePanels, updateStatus, reload); });
+
+    container.appendChild(el('div', { class: 'scene-head' }, [
+      el('div', { class: 'scene-head-titles' }, [
+        el('span', { class: 'scene-head-no', text: 'Babak ' + s.scene_no }),
+        s.title_ms ? el('span', { class: 'scene-head-ms', text: s.title_ms }) : null
+      ]),
+      el('div', { class: 'scene-head-actions' }, [genBtn, addBtn])
+    ]));
+
+    if (!scenePanels.length) {
+      container.appendChild(el('p', { class: 'muted panel-empty', text: 'Belum ada panel untuk babak ini.' }));
+      return;
+    }
+    const list = el('div', { class: 'panel-list' });
+    scenePanels.forEach(function (p) { list.appendChild(panelCard(p, scenePanels, updateStatus, reload)); });
+    container.appendChild(list);
+  });
+}
+
+function panelCard(p, scenePanels, updateStatus, reload) {
+  const codes = Array.isArray(p.characters_json) ? p.characters_json : [];
+  return el('div', { class: 'panel-card' }, [
+    el('div', { class: 'panel-top' }, [
+      el('span', { class: 'panel-no', text: 'Panel ' + p.panel_no }),
+      el('span', { class: 'badge badge--panel', text: panelTypeLabel(p.panel_type) })
+    ]),
+    codes.length ? el('div', { class: 'scene-chips' }, codes.map(codeChip)) : null,
+    p.visual_ms ? el('p', { class: 'panel-visual', text: p.visual_ms }) : null,
+    p.caption_ms ? el('p', { class: 'panel-caption' }, [el('span', { class: 'meta-key', text: 'Kapsyen: ' }), p.caption_ms]) : null,
+    p.dialogue_ar ? el('p', { class: 'panel-dialogue-ar', lang: 'ar', dir: 'rtl', text: p.dialogue_ar }) : null,
+    p.dialogue_ms ? el('p', { class: 'panel-dialogue', text: p.dialogue_ms }) : null,
+    el('div', { class: 'scene-meta' }, [
+      p.location ? el('span', { class: 'meta-item' }, [el('span', { class: 'meta-key', text: 'Lokasi: ' }), p.location]) : null,
+      p.shot_type ? el('span', { class: 'meta-item' }, [el('span', { class: 'meta-key', text: 'Shot: ' }), shotTypeLabel(p.shot_type)]) : null,
+      p.mood ? el('span', { class: 'meta-item' }, [el('span', { class: 'meta-key', text: 'Mood: ' }), p.mood]) : null
+    ]),
+    p.visual_notes ? el('p', { class: 'panel-notes', text: p.visual_notes }) : null,
+    el('div', { class: 'scene-actions' }, [
+      el('button', { class: 'btn btn-ghost btn-sm', type: 'button', onClick: function () { openPanelForm(p.scene_id, p, scenePanels, updateStatus, reload); }, text: 'Edit' }),
+      el('button', { class: 'btn btn-danger btn-sm', type: 'button', onClick: function () { openPanelDelete(p, updateStatus, reload); }, text: 'Padam' })
+    ])
+  ]);
+}
+
+// ---- Borang panel (tambah / edit) ----------------------------------------
+function openPanelForm(sceneId, existing, scenePanels, updateStatus, reload) {
+  const isEdit = !!existing;
+  let nextNo = 1;
+  (scenePanels || []).forEach(function (p) { if (p.panel_no >= nextNo) nextNo = p.panel_no + 1; });
+
+  const panelNo = el('input', { class: 'field-input', type: 'number', min: '1', value: isEdit ? String(existing.panel_no) : String(nextNo) });
+  const panelOrder = el('input', { class: 'field-input', type: 'number', min: '1', value: isEdit ? String(existing.panel_order || existing.panel_no) : String(nextNo) });
+  const visualMs = el('textarea', { class: 'field-input', rows: '2', placeholder: 'Penerangan visual panel' });
+  visualMs.value = isEdit ? (existing.visual_ms || '') : '';
+  const captionMs = el('input', { class: 'field-input', type: 'text', placeholder: 'Kapsyen (Melayu)', value: isEdit ? (existing.caption_ms || '') : '' });
+  const captionAr = el('input', { class: 'field-input field-input--ar', type: 'text', dir: 'rtl', lang: 'ar', placeholder: 'الكابتشن (عربي)', value: isEdit ? (existing.caption_ar || '') : '' });
+  const dialogueAr = el('input', { class: 'field-input field-input--ar', type: 'text', dir: 'rtl', lang: 'ar', placeholder: 'الحوار (عربي)', value: isEdit ? (existing.dialogue_ar || '') : '' });
+  const dialogueMs = el('input', { class: 'field-input', type: 'text', placeholder: 'Dialog (Melayu)', value: isEdit ? (existing.dialogue_ms || '') : '' });
+  const actionMs = el('input', { class: 'field-input', type: 'text', placeholder: 'Aksi (Melayu)', value: isEdit ? (existing.action_ms || '') : '' });
+  const emotionMs = el('input', { class: 'field-input', type: 'text', placeholder: 'Emosi (Melayu)', value: isEdit ? (existing.emotion_ms || '') : '' });
+  const location = el('input', { class: 'field-input field-input--ar', type: 'text', dir: 'rtl', lang: 'ar', placeholder: 'Lokasi', value: isEdit ? (existing.location || '') : '' });
+  const mood = el('input', { class: 'field-input', type: 'text', placeholder: 'Mood', value: isEdit ? (existing.mood || '') : '' });
+  const camera = el('input', { class: 'field-input', type: 'text', placeholder: 'Kamera (cth. eye_level)', value: isEdit ? (existing.camera || '') : '' });
+  const composition = el('input', { class: 'field-input', type: 'text', placeholder: 'Komposisi', value: isEdit ? (existing.composition || '') : '' });
+  const chars = el('input', { class: 'field-input field-input--mono', type: 'text', placeholder: 'MUSA_001, KHIDR_001', value: (isEdit && Array.isArray(existing.characters_json)) ? existing.characters_json.join(', ') : '' });
+  const visualNotes = el('textarea', { class: 'field-input', rows: '2', placeholder: 'Nota visual (cth. polisi wajah tokoh mulia)' });
+  visualNotes.value = isEdit ? (existing.visual_notes || '') : '';
+
+  const ptOpts = [['establishing', 'Pembukaan'], ['character', 'Watak'], ['dialogue', 'Dialog'], ['action', 'Aksi'], ['reaction', 'Reaksi'], ['transition', 'Peralihan'], ['reveal', 'Pendedahan'], ['closing', 'Penutup']];
+  const typeSelect = el('select', { class: 'field-input' }, ptOpts.map(function (o) {
+    const opt = el('option', { value: o[0] }, o[1]);
+    if (isEdit && existing.panel_type === o[0]) opt.selected = true;
+    return opt;
+  }));
+  const stOpts = [['wide', 'Wide'], ['medium', 'Medium'], ['close_up', 'Close-up'], ['over_shoulder', 'Over-shoulder'], ['low_angle', 'Sudut rendah'], ['high_angle', 'Sudut tinggi'], ['detail', 'Detail']];
+  const shotSelect = el('select', { class: 'field-input' }, stOpts.map(function (o) {
+    const opt = el('option', { value: o[0] }, o[1]);
+    if (isEdit && existing.shot_type === o[0]) opt.selected = true;
+    return opt;
+  }));
+  const needsImage = el('input', { type: 'checkbox' });
+  needsImage.checked = isEdit ? !!existing.needs_image : true;
+
+  const errLine = el('p', { class: 'form-error', hidden: true });
+
+  const form = el('form', {
+    class: 'modal-form',
+    onSubmit: async function (e) {
+      e.preventDefault();
+      const noVal = parseInt(panelNo.value, 10);
+      if (!Number.isInteger(noVal) || noVal < 1) { errLine.textContent = 'Nombor panel mesti nombor positif.'; errLine.hidden = false; return; }
+      const orderVal = parseInt(panelOrder.value, 10);
+      if (!Number.isInteger(orderVal) || orderVal < 1) { errLine.textContent = 'Susunan panel mesti nombor positif.'; errLine.hidden = false; return; }
+      const charArr = chars.value.split(',').map(function (x) { return x.trim(); }).filter(function (x) { return x.length > 0; });
+      const payload = {
+        panel_no: noVal,
+        panel_order: orderVal,
+        panel_type: typeSelect.value,
+        shot_type: shotSelect.value,
+        visual_ms: visualMs.value.trim(),
+        action_ms: actionMs.value.trim(),
+        emotion_ms: emotionMs.value.trim(),
+        location: location.value.trim(),
+        characters_json: charArr,
+        dialogue_ar: dialogueAr.value.trim(),
+        dialogue_ms: dialogueMs.value.trim(),
+        caption_ar: captionAr.value.trim(),
+        caption_ms: captionMs.value.trim(),
+        camera: camera.value.trim(),
+        composition: composition.value.trim(),
+        mood: mood.value.trim(),
+        visual_notes: visualNotes.value.trim(),
+        needs_image: needsImage.checked
+      };
+      const submit = form.querySelector('.btn-primary');
+      submit.disabled = true;
+      submit.textContent = 'Menyimpan…';
+      try {
+        if (isEdit) {
+          await api.updatePanel(existing.id, payload);
+          toast('Panel dikemas kini', 'ok');
+        } else {
+          const r = await api.addPanel(sceneId, payload);
+          if (r && r.project) updateStatus(r.project.status);
+          toast('Panel ditambah', 'ok');
+        }
+        closeModal();
+        reload();
+      } catch (err) {
+        submit.disabled = false;
+        submit.textContent = isEdit ? 'Simpan' : 'Tambah';
+        errLine.textContent = err.message;
+        errLine.hidden = false;
+      }
+    }
+  }, [
+    el('h2', { class: 'modal-title', text: isEdit ? 'Edit panel' : 'Tambah panel' }),
+    el('div', { class: 'field-row' }, [
+      el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'No. panel' }), panelNo]),
+      el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Susunan' }), panelOrder])
+    ]),
+    el('div', { class: 'field-row' }, [
+      el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Jenis panel' }), typeSelect]),
+      el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Shot' }), shotSelect])
+    ]),
+    el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Visual (Melayu)' }), visualMs]),
+    el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Watak (kod, dipisah koma)' }), chars]),
+    el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Kapsyen (Melayu)' }), captionMs]),
+    el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Kapsyen (Arab)' }), captionAr]),
+    el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Dialog (Arab)' }), dialogueAr]),
+    el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Dialog (Melayu)' }), dialogueMs]),
+    el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Aksi (Melayu)' }), actionMs]),
+    el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Emosi (Melayu)' }), emotionMs]),
+    el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Lokasi' }), location]),
+    el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Mood' }), mood]),
+    el('div', { class: 'field-row' }, [
+      el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Kamera' }), camera]),
+      el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Komposisi' }), composition])
+    ]),
+    el('label', { class: 'field' }, [el('span', { class: 'field-label', text: 'Nota visual' }), visualNotes]),
+    el('label', { class: 'check-row' }, [needsImage, el('span', { class: 'check-label', text: 'Perlu gambar (needs_image)' })]),
+    errLine,
+    el('div', { class: 'modal-actions' }, [
+      el('button', { class: 'btn btn-ghost', type: 'button', onClick: closeModal, text: 'Batal' }),
+      el('button', { class: 'btn btn-primary', type: 'submit', text: isEdit ? 'Simpan' : 'Tambah' })
+    ])
+  ]);
+
+  openModal(el('div', { class: 'modal-card' }, form));
+}
+
+function openPanelDelete(p, updateStatus, reload) {
+  const card = el('div', { class: 'modal-card' }, [
+    el('h2', { class: 'modal-title', text: 'Padam panel?' }),
+    el('p', { class: 'modal-text' }, [
+      'Panel ',
+      el('strong', { text: '#' + p.panel_no + ' (' + panelTypeLabel(p.panel_type) + ')' }),
+      ' akan dipadam. Tindakan ini tidak boleh dibatalkan.'
+    ]),
+    el('div', { class: 'modal-actions' }, [
+      el('button', { class: 'btn btn-ghost', type: 'button', onClick: closeModal, text: 'Batal' }),
+      el('button', {
+        class: 'btn btn-danger', type: 'button', text: 'Padam',
+        onClick: async function (e) {
+          const b = e.currentTarget;
+          b.disabled = true;
+          b.textContent = 'Memadam…';
+          try {
+            const r = await api.deletePanel(p.id);
+            if (r && r.project) updateStatus(r.project.status);
+            closeModal();
+            toast('Panel dipadam', 'ok');
             reload();
           } catch (err) {
             b.disabled = false;

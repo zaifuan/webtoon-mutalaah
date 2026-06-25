@@ -10,6 +10,7 @@ const projectsRouter = require('./routes/projects');
 const textsRouter = require('./routes/texts');
 const charactersRouter = require('./routes/characters');
 const scenesRouter = require('./routes/scenes');
+const panelsRouter = require('./routes/panels');
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -39,6 +40,10 @@ app.use('/api', charactersRouter);
 // Fasa 3 — scene/babak engine. Juga dipasang pada /api kerana ia merangkumi
 // laluan /projects/:id/scenes, /projects/:id/scenes/reorder dan /scenes/:id.
 app.use('/api', scenesRouter);
+
+// Fasa 4 — panel/storyboard draft engine. Dipasang pada /api kerana ia
+// merangkumi /projects/:id/panels, /scenes/:id/panels, /panels/:id, dll.
+app.use('/api', panelsRouter);
 
 // Apa-apa laluan /api/* yang tidak dikenali → 404 JSON yang kemas.
 app.use('/api', (req, res) => {

@@ -911,6 +911,148 @@ select.field-input {
   border-top: 1px dashed var(--line);
 }
 
+/* --- Fasa 4: Tab Panel --- */
+.scene-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 20px 0 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(215, 166, 74, 0.22);
+}
+
+.scene-head-titles {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.scene-head-no {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--gold);
+}
+
+.scene-head-ms {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--light);
+}
+
+.scene-head-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.panel-empty {
+  margin: 0 0 8px;
+  font-size: 0.86rem;
+}
+
+.panel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.panel-card {
+  background: linear-gradient(180deg, var(--paper) 0%, var(--paper-edge) 100%);
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px;
+}
+
+.panel-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.panel-no {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 0.98rem;
+  color: var(--text);
+}
+
+.badge--panel {
+  background: rgba(81, 65, 143, 0.15);
+  border-color: rgba(81, 65, 143, 0.4);
+  color: #51418f;
+}
+
+.panel-visual {
+  margin-top: 10px;
+  font-size: 0.94rem;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.panel-caption,
+.panel-dialogue {
+  margin-top: 8px;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.panel-dialogue-ar {
+  margin-top: 8px;
+  font-family: var(--arabic);
+  font-size: 1.25rem;
+  line-height: 1.7;
+  color: var(--teal);
+}
+
+.panel-notes {
+  margin-top: 12px;
+  padding: 9px 11px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: #6b5410;
+  background: rgba(215, 166, 74, 0.13);
+  border-left: 3px solid var(--gold);
+  border-radius: 0 6px 6px 0;
+}
+
+/* --- Borang: baris dua medan & checkbox --- */
+.field-row {
+  display: flex;
+  gap: 12px;
+}
+
+.field-row .field {
+  flex: 1;
+  min-width: 0;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 14px;
+  cursor: pointer;
+}
+
+.check-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--teal);
+  cursor: pointer;
+}
+
+.check-label {
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
 /* --- Fokus papan kekunci --- */
 :focus-visible {
   outline: 2px solid var(--gold);
