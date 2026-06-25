@@ -100,14 +100,17 @@ function enforceNoblePrompt(promptText, negativePrompt, isNoble) {
   return { prompt_text: pt, negative_prompt: np };
 }
 
-// Bina prompt lengkap daripada panel + babak + visual + peta watak.
+// Bina prompt lengkap daripada panel + babak + skrip + visual + peta watak.
 //  panel   : objek panel (characters_json sudah array)
 //  scene   : objek babak
+//  script  : objek skrip PIAWAI — { speaker, narration, caption, dialogue,
+//            thought, sfx, emotion }
 //  visual  : objek visual director (characters_layout sudah array) atau {}
 //  charMap : { code: { character_type, face_policy, visual_dna(obj) } }
-function buildPrompt(panel, scene, visual, charMap) {
+function buildPrompt(panel, scene, script, visual, charMap) {
   const codes = Array.isArray(panel.characters_json) ? panel.characters_json : [];
   const v = visual || {};
+  const sc = script || {};
   const noble = panelHasNoble(codes, v, charMap);
 
   const parts = [];
@@ -122,11 +125,19 @@ function buildPrompt(panel, scene, visual, charMap) {
   if (v.color_palette) cam.push(rd(v.color_palette) + ' color palette');
   if (cam.length) parts.push(cam.join(', ') + '.');
 
-  // Penerangan babak.
+  // Penerangan babak + skrip (naratif / dialog / kapsyen).
+  // Skrip PIAWAI: { speaker, narration, caption, dialogue, thought, sfx,
+  // emotion }. Buat masa ini hanya narration/dialogue/caption digunakan;
+  // thought & sfx diterima tetapi belum dimasukkan ke prompt (behaviour lama).
   const sceneEn = SCENE_TYPE_EN[scene && scene.scene_type] || 'a narrative scene';
   parts.push('The scene depicts ' + sceneEn + '.');
-  if (panel.visual_ms) parts.push('Action (source, Malay): ' + panel.visual_ms);
-  if (panel.caption_ms) parts.push('Caption: ' + panel.caption_ms);
+  const narration = sc.narration || panel.visual_ms;
+  if (narration) parts.push('Action (source, Malay): ' + narration);
+  if (sc.dialogue) {
+    parts.push('Dialogue (Malay): "' + sc.dialogue + '"' + (sc.speaker ? ' spoken by ' + sc.speaker + '.' : '.'));
+  }
+  const caption = sc.caption || panel.caption_ms;
+  if (caption) parts.push('Caption: ' + caption);
   if (scene && scene.location) parts.push('Location: ' + scene.location + '.');
 
   // Watak + susun atur.

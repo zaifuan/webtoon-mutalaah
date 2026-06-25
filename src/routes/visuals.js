@@ -7,6 +7,7 @@ const pool = require('../db/pool');
 const { PROJECT_STATUS } = require('../config/projectStatus');
 const { VISUAL_ENUM_FIELDS, LAYOUT_ENUM_FIELDS, isValid } = require('../config/visualDirector');
 const { extractVisual, NOBLE_VISUAL_NOTE } = require('../services/visualEngine');
+const { buildScript } = require('../services/scriptSource');
 
 const VISUAL_COLUMNS =
   'id, project_id, scene_id, panel_id, camera, shot, angle, lens, composition, ' +
@@ -17,9 +18,10 @@ const VISUAL_COLUMNS =
 const PROJECT_COLUMNS =
   'id, title_ar, title_ms, description, status, created_at, updated_at';
 
-// Lajur panel yang diperlukan oleh enjin visual.
+// Lajur panel yang diperlukan oleh enjin visual + skrip.
 const PANEL_SELECT = 'id, project_id, scene_id, panel_no, panel_order, panel_type, ' +
-  'shot_type, camera, composition, location, mood, emotion_ms, visual_notes, characters_json';
+  'shot_type, camera, composition, location, mood, emotion_ms, visual_notes, ' +
+  'visual_ms, action_ms, dialogue_ms, caption_ms, characters_json';
 
 const INSERT_HEAD =
   `INSERT INTO visuals
@@ -132,7 +134,7 @@ async function syncVisualStatus(client, projectId) {
   if (n >= 1) {
     if (cur === PROJECT_STATUS.DRAFT || cur === PROJECT_STATUS.TEXT_READY ||
         cur === PROJECT_STATUS.CHARACTER_READY || cur === PROJECT_STATUS.SCENE_READY ||
-        cur === PROJECT_STATUS.PANEL_READY) {
+        cur === PROJECT_STATUS.PANEL_READY || cur === PROJECT_STATUS.SCRIPT_READY) {
       next = PROJECT_STATUS.VISUAL_READY;
     }
   } else if (cur === PROJECT_STATUS.VISUAL_READY) {
@@ -167,7 +169,9 @@ function panelNorm(row) {
 
 // Jana visual bagi satu panel dalam transaksi sedia ada (idempotent).
 async function generateForPanel(client, panelRow, scene, charMap) {
-  const v = extractVisual(panelNorm(panelRow), scene || {}, charMap);
+  const panel = panelNorm(panelRow);
+  const script = buildScript(panel, scene || {}, charMap);
+  const v = extractVisual(panel, scene || {}, script, charMap);
   const ins = await client.query(
     INSERT_HEAD + ' ON CONFLICT (panel_id) DO NOTHING RETURNING id',
     visualParams(v)

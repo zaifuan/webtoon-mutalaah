@@ -557,11 +557,12 @@ async function renderDetail(id) {
     project.description ? el('p', { class: 'detail-desc', text: project.description }) : null
   ]));
 
-  // Tab bar: TEKS | WATAK | BABAK | PANEL | VISUAL | PROMPT
+  // Tab bar: TEKS | WATAK | BABAK | PANEL | SCRIPT | VISUAL | PROMPT
   const tabTeks = el('button', { class: 'tab is-active', type: 'button', text: 'Teks' });
   const tabWatak = el('button', { class: 'tab', type: 'button', text: 'Watak' });
   const tabBabak = el('button', { class: 'tab', type: 'button', text: 'Babak' });
   const tabPanel = el('button', { class: 'tab', type: 'button', text: 'Panel' });
+  const tabScript = el('button', { class: 'tab', type: 'button', text: 'Script' });
   const tabVisual = el('button', { class: 'tab', type: 'button', text: 'Visual' });
   const tabPrompt = el('button', { class: 'tab', type: 'button', text: 'Prompt' });
   const content = el('div', { class: 'tab-content' });
@@ -571,6 +572,7 @@ async function renderDetail(id) {
     tabWatak.className = 'tab';
     tabBabak.className = 'tab';
     tabPanel.className = 'tab';
+    tabScript.className = 'tab';
     tabVisual.className = 'tab';
     tabPrompt.className = 'tab';
     if (name === 'watak') {
@@ -582,6 +584,9 @@ async function renderDetail(id) {
     } else if (name === 'panel') {
       tabPanel.className = 'tab is-active';
       renderPanelTab(id, content, updateStatus);
+    } else if (name === 'script') {
+      tabScript.className = 'tab is-active';
+      renderScriptTab(id, content, updateStatus);
     } else if (name === 'visual') {
       tabVisual.className = 'tab is-active';
       renderVisualTab(id, content, updateStatus);
@@ -597,10 +602,11 @@ async function renderDetail(id) {
   tabWatak.addEventListener('click', function () { setTab('watak'); });
   tabBabak.addEventListener('click', function () { setTab('babak'); });
   tabPanel.addEventListener('click', function () { setTab('panel'); });
+  tabScript.addEventListener('click', function () { setTab('script'); });
   tabVisual.addEventListener('click', function () { setTab('visual'); });
   tabPrompt.addEventListener('click', function () { setTab('prompt'); });
 
-  view.appendChild(el('div', { class: 'tabs' }, [tabTeks, tabWatak, tabBabak, tabPanel, tabVisual, tabPrompt]));
+  view.appendChild(el('div', { class: 'tabs' }, [tabTeks, tabWatak, tabBabak, tabPanel, tabScript, tabVisual, tabPrompt]));
   view.appendChild(content);
   setTab('teks');
 }
@@ -1849,6 +1855,114 @@ function openPromptDelete(pr, updateStatus, reload) {
     ])
   ]);
   openModal(card);
+}
+
+// ---- Tab: Script (pratonton; enjin penuh pada Fasa 7) ---------------------
+function scriptAsArray(v) {
+  if (Array.isArray(v)) return v;
+  if (typeof v === 'string') { try { return JSON.parse(v); } catch (e) { return []; } }
+  return [];
+}
+function scriptFirstMood(mood) {
+  if (!mood) return '';
+  return String(mood).split(',')[0].trim() || '';
+}
+function scriptPickSpeaker(codes, typeMap) {
+  const nonGroup = codes.filter(function (c) { return !/_GROUP$/.test(c); });
+  if (!nonGroup.length) return '';
+  for (var i = 0; i < nonGroup.length; i++) {
+    if (typeMap[nonGroup[i]] === 'noble_figure_no_face') return nonGroup[i];
+  }
+  return nonGroup[0];
+}
+
+async function renderScriptTab(id, container, updateStatus) {
+  container.innerHTML = '';
+  container.appendChild(el('p', { class: 'muted', text: 'Memuatkan skrip…' }));
+
+  let scenes, panels, characters;
+  try {
+    scenes = await api.listScenes(id);
+    panels = await api.listProjectPanels(id);
+    characters = await api.listCharacters(id);
+  } catch (err) {
+    container.innerHTML = '';
+    container.appendChild(el('p', { class: 'error-text', text: 'Gagal memuatkan skrip: ' + err.message }));
+    return;
+  }
+  container.innerHTML = '';
+
+  const typeMap = {};
+  characters.forEach(function (c) { if (c.character_code) typeMap[c.character_code] = c.character_type; });
+
+  const panelsByScene = {};
+  panels.forEach(function (p) {
+    const k = String(p.scene_id);
+    if (!panelsByScene[k]) panelsByScene[k] = [];
+    panelsByScene[k].push(p);
+  });
+
+  container.appendChild(el('div', { class: 'script-note' }, [
+    el('p', { class: 'script-note-title', text: 'Pratonton Skrip' }),
+    el('p', { class: 'script-note-text', text: 'Skrip piawai bagi setiap panel — Speaker, Narration, Caption, Dialogue, Thought, SFX, Emotion — kini disediakan automatik daripada data panel dan digunakan oleh Visual Director serta Prompt Engine. Medan Thought dan SFX telah diwujudkan (kosong buat masa ini) untuk Fasa 7. Enjin Skrip penuh (jana, edit, susun) akan dibina pada Fasa 7.' })
+  ]));
+
+  if (!panels.length) {
+    container.appendChild(el('div', { class: 'empty' }, [
+      el('p', { class: 'empty-ar', lang: 'ar', dir: 'rtl', text: 'لا نص بعد' }),
+      el('p', { class: 'empty-title', text: 'Belum ada panel' }),
+      el('p', { class: 'empty-text', text: 'Sila jana panel dahulu untuk melihat pratonton skrip.' })
+    ]));
+    return;
+  }
+
+  scenes.forEach(function (s) {
+    const sps = panelsByScene[String(s.id)] || [];
+    if (!sps.length) return;
+    container.appendChild(el('div', { class: 'scene-head' }, [
+      el('div', { class: 'scene-head-titles' }, [
+        el('span', { class: 'scene-head-no', text: 'Babak ' + s.scene_no }),
+        s.title_ms ? el('span', { class: 'scene-head-ms', text: s.title_ms }) : null
+      ])
+    ]));
+    sps.forEach(function (p) { container.appendChild(scriptCard(p, s, typeMap)); });
+  });
+}
+
+function scriptCard(panel, scene, typeMap) {
+  const codes = scriptAsArray(panel.characters_json);
+  // Bentuk skrip PIAWAI (sama seperti scriptSource.js di pelayan).
+  const script = {
+    speaker: scriptPickSpeaker(codes, typeMap) || '',
+    narration: panel.visual_ms || panel.action_ms || '',
+    caption: panel.caption_ms || '',
+    dialogue: panel.dialogue_ms || '',
+    thought: '',
+    sfx: '',
+    emotion: panel.emotion_ms || scriptFirstMood(scene && scene.mood) || ''
+  };
+
+  function row(key, value) {
+    const has = value !== null && value !== undefined && String(value).trim() !== '';
+    return el('div', { class: 'script-row' }, [
+      el('span', { class: 'script-key', text: key }),
+      el('span', { class: 'script-val' + (has ? '' : ' script-val--empty'), text: has ? String(value) : '—' })
+    ]);
+  }
+
+  return el('div', { class: 'script-card' }, [
+    el('div', { class: 'panel-top' }, [
+      el('span', { class: 'panel-no', text: 'Panel ' + panel.panel_no }),
+      el('span', { class: 'badge badge--preset', text: 'auto' })
+    ]),
+    row('Speaker', script.speaker),
+    row('Narration', script.narration),
+    row('Caption', script.caption),
+    row('Dialogue', script.dialogue),
+    row('Thought', script.thought),
+    row('SFX', script.sfx),
+    row('Emotion', script.emotion)
+  ]);
 }
 
 // ---- Router ---------------------------------------------------------------

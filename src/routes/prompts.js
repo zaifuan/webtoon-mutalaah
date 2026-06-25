@@ -10,6 +10,7 @@ const {
   isValidStatus, isValidPreset
 } = require('../config/promptStyle');
 const { buildPrompt, enforceNoblePrompt, panelHasNoble } = require('../services/promptEngine');
+const { buildScript } = require('../services/scriptSource');
 
 const PROMPT_COLUMNS =
   'id, project_id, scene_id, panel_id, prompt_text, negative_prompt, ' +
@@ -28,8 +29,8 @@ const JOIN_SELECT =
   `SELECT v.panel_id, v.project_id, v.scene_id,
           v.shot, v.angle, v.lens, v.composition, v.lighting, v.color_palette,
           v.atmosphere, v.focus, v.depth, v.face_policy, v.characters_layout,
-          p.characters_json, p.visual_ms, p.caption_ms, p.panel_type,
-          p.panel_no, p.panel_order,
+          p.characters_json, p.visual_ms, p.caption_ms, p.dialogue_ms, p.action_ms,
+          p.emotion_ms, p.panel_type, p.panel_no, p.panel_order,
           s.scene_type AS scene_type, s.location AS scene_location, s.mood AS scene_mood, s.scene_no AS scene_no
      FROM visuals v
      JOIN panels p ON p.id = v.panel_id
@@ -71,6 +72,7 @@ function shape(row) {
   const panel = {
     id: row.panel_id, project_id: row.project_id, scene_id: row.scene_id,
     panel_type: row.panel_type, visual_ms: row.visual_ms, caption_ms: row.caption_ms,
+    dialogue_ms: row.dialogue_ms, action_ms: row.action_ms, emotion_ms: row.emotion_ms,
     characters_json: jget(row.characters_json) || []
   };
   const scene = { scene_type: row.scene_type, location: row.scene_location, mood: row.scene_mood };
@@ -84,7 +86,8 @@ function shape(row) {
 }
 
 async function insertPrompt(client, shaped, charMap) {
-  const p = buildPrompt(shaped.panel, shaped.scene, shaped.visual, charMap);
+  const script = buildScript(shaped.panel, shaped.scene, charMap);
+  const p = buildPrompt(shaped.panel, shaped.scene, script, shaped.visual, charMap);
   const ins = await client.query(
     INSERT_HEAD + ' ON CONFLICT (panel_id) DO NOTHING RETURNING id',
     [shaped.panel.project_id, shaped.panel.scene_id, shaped.panel.id,

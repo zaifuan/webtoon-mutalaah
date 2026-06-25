@@ -112,9 +112,14 @@ function firstMood(mood) {
 }
 
 // Bina layout + continuity bagi setiap watak panel.
-function buildLayout(codes, panel, scene, charMap) {
+//  script : objek skrip PIAWAI panel — { speaker, narration, caption,
+//           dialogue, thought, sfx, emotion }. Hanya speaker & emotion
+//           digunakan buat masa ini; medan lain diterima tetapi tidak diproses.
+function buildLayout(codes, panel, scene, script, charMap) {
   const positions = positionsFor(codes.length);
   const isDialoguePair = panel.panel_type === 'dialogue' && codes.length >= 2;
+  const sc = script || {};
+  const speaker = sc.speaker || '';
 
   return codes.map(function (code, idx) {
     const isGroup = /_GROUP$/.test(code);
@@ -141,7 +146,8 @@ function buildLayout(codes, panel, scene, charMap) {
       pose: isGroup ? 'gathered' : (POSE_BY_TYPE[panel.panel_type] || 'standing'),
       gesture: isGroup ? 'neutral' : (GESTURE_BY_TYPE[panel.panel_type] || 'neutral'),
       eye_direction: eye,
-      emotion: panel.emotion_ms || firstMood(scene.mood),
+      emotion: sc.emotion || panel.emotion_ms || firstMood(scene.mood),
+      speaking: speaker ? (code === speaker) : false,
       props: props
     };
   });
@@ -155,11 +161,14 @@ function hasNoble(codes, charMap) {
   return false;
 }
 
-// Jana satu rekod visual daripada panel + babak + peta watak.
+// Jana satu rekod visual daripada babak + panel + skrip + peta watak.
 //  panel    : objek panel (characters_json sudah array)
 //  scene    : objek babak
+//  script   : objek skrip PIAWAI — { speaker, narration, caption, dialogue,
+//             thought, sfx, emotion }
 //  charMap  : { code: { character_type, face_policy, visual_dna(obj) } }
-function extractVisual(panel, scene, charMap) {
+function extractVisual(panel, scene, script, charMap) {
+  const sc = script || {};
   const codes = Array.isArray(panel.characters_json) ? panel.characters_json : [];
   const ptype = panel.panel_type || 'character';
   const sm = SHOT_MAP[panel.shot_type] || { shot: 'medium_shot', lens: 'normal_50mm', angle: 'eye_level' };
@@ -187,7 +196,7 @@ function extractVisual(panel, scene, charMap) {
     composition: COMPOSITION_BY_TYPE[ptype] || 'centered',
     camera_movement: MOVEMENT_BY_TYPE[ptype] || 'static',
 
-    characters_layout: buildLayout(codes, panel, scene, charMap),
+    characters_layout: buildLayout(codes, panel, scene, sc, charMap),
 
     location: panel.location || scene.location || null,
     weather: weather,
