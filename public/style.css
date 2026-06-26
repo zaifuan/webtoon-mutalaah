@@ -1416,6 +1416,61 @@ select.field-input {
   .rv-summary { grid-template-columns: repeat(2, 1fr); }
 }
 
+/* --- Fasa 8: Tab Image (Local Image Workflow) --- */
+.im-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.im-title { font-family: var(--display); font-size: 1.05rem; margin: 0; }
+.im-head-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.im-summary { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 10px; }
+.im-stat { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 4px; background: linear-gradient(180deg, var(--paper) 0%, var(--paper-edge) 100%); border: 1.5px solid var(--ink); border-radius: var(--radius); }
+.im-stat-val { font-family: var(--display); font-weight: 700; font-size: 1.05rem; color: var(--text); }
+.im-stat-key { font-size: 0.62rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); text-align: center; }
+.im-stat--ok { border-color: rgba(47, 143, 134, 0.55); }
+.im-stat--ok .im-stat-val { color: #1f6b63; }
+.im-stat--warn { border-color: rgba(215, 166, 74, 0.6); background: rgba(215, 166, 74, 0.08); }
+.im-stat--warn .im-stat-val { color: #8a6a1f; }
+.im-stat--error { border-color: rgba(176, 58, 58, 0.55); background: rgba(176, 58, 58, 0.06); }
+.im-stat--error .im-stat-val { color: #b03a3a; }
+
+.im-folder { font-size: 0.74rem; color: var(--muted); background: var(--paper-edge); border: 1px dashed var(--line); border-radius: 6px; padding: 7px 10px; margin: 0 0 14px; word-break: break-all; }
+
+.im-cards { display: flex; flex-direction: column; gap: 12px; }
+.im-scene-h { font-family: var(--display); font-size: 0.82rem; color: var(--teal); text-transform: uppercase; letter-spacing: 0.05em; margin: 10px 0 0; }
+
+.im-card { background: linear-gradient(180deg, var(--paper) 0%, var(--paper-edge) 100%); border: 2px solid var(--ink); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px; }
+.im-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.im-card-title { font-family: var(--display); font-weight: 700; }
+.im-card-sub { margin: 4px 0 0; font-size: 0.82rem; color: var(--muted); }
+
+.im-badge { font-size: 0.7rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; border: 1px solid; }
+.im-badge--uploaded { background: rgba(74, 124, 215, 0.14); border-color: rgba(74, 124, 215, 0.5); color: #2f5aa8; }
+.im-badge--linked { background: rgba(74, 124, 215, 0.14); border-color: rgba(74, 124, 215, 0.5); color: #2f5aa8; }
+.im-badge--approved { background: rgba(47, 143, 134, 0.16); border-color: rgba(47, 143, 134, 0.5); color: #1f6b63; }
+.im-badge--rejected { background: rgba(176, 58, 58, 0.14); border-color: rgba(176, 58, 58, 0.5); color: #b03a3a; }
+.im-badge--draft { background: var(--paper-edge); border-color: var(--line); color: var(--muted); }
+.im-badge--none { background: var(--paper-edge); border-color: var(--line); color: var(--muted); }
+
+.im-prompt-ok { display: inline-block; margin-top: 8px; font-size: 0.74rem; color: #1f6b63; }
+.im-prompt-no { display: inline-block; margin-top: 8px; font-size: 0.74rem; color: var(--muted); }
+
+.im-preview { margin: 10px 0; border: 1.5px solid var(--line); border-radius: var(--radius); overflow: hidden; background: #0d1117; display: flex; align-items: center; justify-content: center; min-height: 120px; }
+.im-preview--empty { flex-direction: column; gap: 4px; background: var(--paper-edge); border-style: dashed; padding: 22px 10px; }
+.im-img { width: 100%; height: auto; display: block; }
+.im-placeholder { font-size: 0.85rem; color: var(--muted); font-weight: 600; }
+.im-expect { font-size: 0.7rem; color: var(--muted); font-family: var(--mono, monospace); }
+.im-meta { margin: 2px 0 0; font-size: 0.72rem; color: var(--muted); word-break: break-all; }
+
+.im-file { display: none; }
+.im-notes { margin-top: 10px; }
+.im-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+
+.btn-danger { background: rgba(176, 58, 58, 0.12); border-color: rgba(176, 58, 58, 0.5); color: #b03a3a; }
+.btn-danger:hover { background: rgba(176, 58, 58, 0.2); }
+
+@media (max-width: 420px) {
+  .im-summary { grid-template-columns: repeat(3, 1fr); }
+}
+
 /* --- Fokus papan kekunci --- */
 :focus-visible {
   outline: 2px solid var(--gold);

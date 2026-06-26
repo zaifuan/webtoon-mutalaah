@@ -36,6 +36,10 @@ services:
       PGDATABASE: ${PGDATABASE:-webtoon_mutalaah}
     ports:
       - "${APP_PORT:-3000}:3000"
+    # Fasa 8 — ikat folder uploads ke host supaya gambar kekal selepas rebuild
+    # dan boleh disalin masuk melalui WinSCP untuk import-local.
+    volumes:
+      - ./uploads:/app/uploads
     # Jalankan migration dahulu, kemudian mulakan pelayan.
     command: sh -c "node src/migrate.js && node src/server.js"
 

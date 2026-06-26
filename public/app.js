@@ -202,6 +202,32 @@ const api = {
   },
   getPanelReview(panelId) {
     return this.req('GET', '/api/panels/' + panelId + '/review');
+  },
+  getProjectImages(id) {
+    return this.req('GET', '/api/projects/' + id + '/images');
+  },
+  getPanelImage(panelId) {
+    return this.req('GET', '/api/panels/' + panelId + '/image');
+  },
+  async uploadPanelImage(panelId, file) {
+    const fd = new FormData();
+    fd.append('image', file);
+    const res = await fetch('/api/panels/' + panelId + '/image/upload', {
+      method: 'POST', headers: { Accept: 'application/json' }, body: fd
+    });
+    let data = null;
+    try { data = await res.json(); } catch (e) { data = null; }
+    if (!res.ok) throw new Error((data && data.error) || ('Ralat pelayan (' + res.status + ')'));
+    return data;
+  },
+  importLocalImages(id) {
+    return this.req('POST', '/api/projects/' + id + '/images/import-local', {});
+  },
+  updateImage(imageId, payload) {
+    return this.req('PUT', '/api/images/' + imageId, payload);
+  },
+  deleteImage(imageId) {
+    return this.req('DELETE', '/api/images/' + imageId);
   }
 };
 
@@ -641,6 +667,7 @@ async function renderDetail(id) {
   const tabVisual = el('button', { class: 'tab', type: 'button', text: 'Visual' });
   const tabPrompt = el('button', { class: 'tab', type: 'button', text: 'Prompt' });
   const tabReview = el('button', { class: 'tab', type: 'button', text: 'Review' });
+  const tabImage = el('button', { class: 'tab', type: 'button', text: 'Image' });
   const content = el('div', { class: 'tab-content' });
 
   function setTab(name) {
@@ -652,6 +679,7 @@ async function renderDetail(id) {
     tabVisual.className = 'tab';
     tabPrompt.className = 'tab';
     tabReview.className = 'tab';
+    tabImage.className = 'tab';
     if (name === 'watak') {
       tabWatak.className = 'tab is-active';
       renderCharacterTab(id, content, updateStatus);
@@ -673,6 +701,9 @@ async function renderDetail(id) {
     } else if (name === 'review') {
       tabReview.className = 'tab is-active';
       renderReviewTab(id, content, updateStatus);
+    } else if (name === 'image') {
+      tabImage.className = 'tab is-active';
+      renderImageTab(id, content, updateStatus);
     } else {
       tabTeks.className = 'tab is-active';
       renderTextTab(id, content, updateStatus);
@@ -688,8 +719,9 @@ async function renderDetail(id) {
   tabVisual.addEventListener('click', function () { setTab('visual'); });
   tabPrompt.addEventListener('click', function () { setTab('prompt'); });
   tabReview.addEventListener('click', function () { setTab('review'); });
+  tabImage.addEventListener('click', function () { setTab('image'); });
 
-  view.appendChild(el('div', { class: 'tabs' }, [tabTeks, tabWatak, tabBabak, tabPanel, tabScript, tabVisual, tabPrompt, tabReview]));
+  view.appendChild(el('div', { class: 'tabs' }, [tabTeks, tabWatak, tabBabak, tabPanel, tabScript, tabVisual, tabPrompt, tabReview, tabImage]));
   view.appendChild(content);
   setTab('teks');
 }
@@ -2481,6 +2513,222 @@ async function renderReviewTab(id, container, updateStatus) {
     return;
   }
   applyFilter();
+}
+
+// ---- Tab: Image (Local Image Workflow, Fasa 8) ----------------------------
+const IMG_STATUS_LABEL = { draft: 'Draf', uploaded: 'Dimuat naik', linked: 'Dipaut', approved: 'Diluluskan', rejected: 'Ditolak' };
+
+function imgStat(label, value, cls) {
+  return el('div', { class: 'im-stat' + (cls ? ' ' + cls : '') }, [
+    el('span', { class: 'im-stat-val', text: String(value) }),
+    el('span', { class: 'im-stat-key', text: label })
+  ]);
+}
+
+function imageSummaryBox(sm) {
+  return el('div', { class: 'im-summary' }, [
+    imgStat('Panel', sm.total_panels || 0),
+    imgStat('Ada Gambar', sm.images_linked || 0, 'im-stat--ok'),
+    imgStat('Tiada', sm.missing || 0, (sm.missing ? 'im-stat--warn' : '')),
+    imgStat('Diluluskan', sm.approved || 0, 'im-stat--ok'),
+    imgStat('Ditolak', sm.rejected || 0, (sm.rejected ? 'im-stat--error' : ''))
+  ]);
+}
+
+async function exportPromptFolderInfo(id, btn) {
+  const old = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Menyedia…';
+  try {
+    let prompts = [];
+    try { prompts = await api.listProjectPrompts(id); } catch (e) { prompts = []; }
+    const byPanel = {};
+    (prompts || []).forEach(function (p) { byPanel[String(p.panel_id)] = p; });
+    let data = await api.getProjectImages(id);
+    const panels = (data && data.items) || [];
+    const info = {
+      project_id: id,
+      upload_folder: (data && data.summary && data.summary.upload_folder) || ('uploads/images/project-' + id + '/'),
+      naming: 'panel-{panel_id}.png  (atau .jpg / .webp)',
+      generated_at: new Date().toISOString(),
+      panels: panels.map(function (it) {
+        const pr = byPanel[String(it.panel_id)] || {};
+        return {
+          panel_id: it.panel_id,
+          scene_no: it.scene_no,
+          panel_no: it.panel_no,
+          expected_filename: it.expected_filename,
+          has_image: !!it.image,
+          prompt_text: pr.prompt_text || '',
+          negative_prompt: pr.negative_prompt || ''
+        };
+      })
+    };
+    const blob = new Blob([JSON.stringify(info, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'prompt-folder-info-project-' + id + '.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+    toast('Info folder prompt dimuat turun', 'ok');
+  } catch (e) { toast('Gagal eksport: ' + e.message, 'error'); }
+  btn.disabled = false; btn.textContent = old;
+}
+
+function imageCard(item, id, refresh, updateStatus) {
+  const img = item.image;
+
+  // Pratonton / placeholder
+  let preview;
+  if (img && img.url) {
+    const bust = img.updated_at ? ('?t=' + encodeURIComponent(img.updated_at)) : '';
+    preview = el('div', { class: 'im-preview' }, [
+      el('img', { class: 'im-img', src: img.url + bust, alt: 'panel ' + item.panel_no, loading: 'lazy' })
+    ]);
+  } else {
+    preview = el('div', { class: 'im-preview im-preview--empty' }, [
+      el('span', { class: 'im-placeholder', text: 'Tiada gambar' }),
+      el('span', { class: 'im-expect', text: item.expected_filename })
+    ]);
+  }
+
+  // Status badge gambar
+  const statusBadge = img
+    ? el('span', { class: 'im-badge im-badge--' + img.status, text: IMG_STATUS_LABEL[img.status] || img.status })
+    : el('span', { class: 'im-badge im-badge--none', text: 'Belum ada' });
+
+  // Muat naik
+  const fileInput = el('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp', class: 'im-file' });
+  const uploadBtn = el('button', { class: 'btn btn-primary btn-sm', type: 'button', text: img ? 'Ganti Gambar' : 'Upload Gambar' });
+  uploadBtn.addEventListener('click', function () { fileInput.click(); });
+  fileInput.addEventListener('change', async function () {
+    const f = fileInput.files && fileInput.files[0];
+    if (!f) return;
+    if (f.size > 10 * 1024 * 1024) { toast('Saiz fail melebihi 10MB', 'error'); fileInput.value = ''; return; }
+    uploadBtn.disabled = true; const lbl = uploadBtn.textContent; uploadBtn.textContent = 'Memuat naik…';
+    try {
+      await api.uploadPanelImage(item.panel_id, f);
+      toast('Gambar dimuat naik', 'ok');
+      if (updateStatus) updateStatus();
+      refresh();
+    } catch (e) { toast('Gagal: ' + e.message, 'error'); uploadBtn.disabled = false; uploadBtn.textContent = lbl; fileInput.value = ''; }
+  });
+
+  const actions = [uploadBtn, fileInput];
+
+  if (img) {
+    const approveBtn = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', text: 'Approve' });
+    approveBtn.addEventListener('click', async function () {
+      try { await api.updateImage(img.id, { status: 'approved' }); toast('Diluluskan', 'ok'); if (updateStatus) updateStatus(); refresh(); }
+      catch (e) { toast('Gagal: ' + e.message, 'error'); }
+    });
+    const rejectBtn = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', text: 'Reject' });
+    rejectBtn.addEventListener('click', async function () {
+      try { await api.updateImage(img.id, { status: 'rejected' }); toast('Ditolak', 'ok'); if (updateStatus) updateStatus(); refresh(); }
+      catch (e) { toast('Gagal: ' + e.message, 'error'); }
+    });
+    const delBtn = el('button', { class: 'btn btn-danger btn-sm', type: 'button', text: 'Padam' });
+    delBtn.addEventListener('click', async function () {
+      if (!window.confirm('Padam gambar panel ' + item.panel_no + '?')) return;
+      try { await api.deleteImage(img.id); toast('Gambar dipadam', 'ok'); if (updateStatus) updateStatus(); refresh(); }
+      catch (e) { toast('Gagal: ' + e.message, 'error'); }
+    });
+    actions.push(approveBtn, rejectBtn, delBtn);
+  }
+
+  // Nota
+  const notesInput = el('input', { type: 'text', class: 'field-input im-notes', placeholder: 'Nota (pilihan)…' });
+  if (img && img.notes) notesInput.value = img.notes;
+  if (img) {
+    const saveNote = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', text: 'Simpan Nota' });
+    saveNote.addEventListener('click', async function () {
+      try { await api.updateImage(img.id, { notes: notesInput.value }); toast('Nota disimpan', 'ok'); }
+      catch (e) { toast('Gagal: ' + e.message, 'error'); }
+    });
+    actions.push(saveNote);
+  }
+
+  const promptInfo = item.has_prompt
+    ? el('span', { class: 'im-prompt-ok', text: 'Prompt: ' + (item.prompt_status || 'ada') })
+    : el('span', { class: 'im-prompt-no', text: 'Prompt: tiada' });
+
+  return el('div', { class: 'im-card' }, [
+    el('div', { class: 'im-card-top' }, [
+      el('span', { class: 'im-card-title', text: 'Babak ' + (item.scene_no || '–') + ' · Panel ' + item.panel_no }),
+      statusBadge
+    ]),
+    item.scene_title ? el('p', { class: 'im-card-sub', text: item.scene_title }) : null,
+    promptInfo,
+    preview,
+    img && (img.width || img.file_size)
+      ? el('p', { class: 'im-meta', text: [(img.width && img.height ? img.width + '×' + img.height + 'px' : ''), (img.file_size ? Math.round(img.file_size / 1024) + ' KB' : ''), (img.source_type || '')].filter(Boolean).join(' · ') })
+      : null,
+    img ? el('p', { class: 'im-meta', text: 'Fail: ' + (img.image_filename || '') }) : null,
+    notesInput,
+    el('div', { class: 'im-actions' }, actions)
+  ]);
+}
+
+async function renderImageTab(id, container, updateStatus) {
+  container.innerHTML = '';
+  container.appendChild(el('p', { class: 'muted', text: 'Memuatkan gambar…' }));
+
+  function refresh() { renderImageTab(id, container, updateStatus); }
+
+  let data;
+  try {
+    data = await api.getProjectImages(id);
+  } catch (err) {
+    container.innerHTML = '';
+    container.appendChild(el('p', { class: 'error-text', text: 'Gagal memuatkan: ' + err.message }));
+    return;
+  }
+  container.innerHTML = '';
+
+  const items = (data && data.items) || [];
+  const summary = (data && data.summary) || {};
+
+  // Tajuk + butang
+  const importBtn = el('button', { class: 'btn btn-primary', type: 'button', text: 'Import Local Images' });
+  importBtn.addEventListener('click', async function () {
+    importBtn.disabled = true; const lbl = importBtn.textContent; importBtn.textContent = 'Mengimport…';
+    try {
+      const r = await api.importLocalImages(id);
+      toast('Import selesai: ' + r.linked + ' dipaut, ' + r.skipped + ' dilangkau', 'ok');
+      if (updateStatus) updateStatus();
+      refresh();
+    } catch (e) { toast('Gagal import: ' + e.message, 'error'); importBtn.disabled = false; importBtn.textContent = lbl; }
+  });
+  const refreshBtn = el('button', { class: 'btn btn-ghost', type: 'button', text: 'Refresh' });
+  refreshBtn.addEventListener('click', function () { refresh(); });
+  const exportBtn = el('button', { class: 'btn btn-ghost', type: 'button', text: 'Export Prompt Folder Info' });
+  exportBtn.addEventListener('click', function () { exportPromptFolderInfo(id, exportBtn); });
+
+  container.appendChild(el('div', { class: 'im-head' }, [
+    el('h2', { class: 'im-title', text: 'Image' }),
+    el('div', { class: 'im-head-btns' }, [importBtn, refreshBtn, exportBtn])
+  ]));
+  container.appendChild(imageSummaryBox(summary));
+  container.appendChild(el('p', { class: 'im-folder', text: 'Folder WinSCP: ' + ((summary && summary.upload_folder) || ('uploads/images/project-' + id + '/')) + ' — namakan fail panel-{id}.png' }));
+
+  if (!items.length) {
+    container.appendChild(el('div', { class: 'empty' }, [
+      el('p', { class: 'empty-title', text: 'Belum ada panel' }),
+      el('p', { class: 'empty-text', text: 'Sila jana panel & prompt dahulu.' })
+    ]));
+    return;
+  }
+
+  // Kumpul ikut babak
+  const cards = el('div', { class: 'im-cards' });
+  let lastScene = null;
+  items.forEach(function (it) {
+    if (it.scene_no !== lastScene) {
+      lastScene = it.scene_no;
+      cards.appendChild(el('h3', { class: 'im-scene-h', text: 'Babak ' + (it.scene_no || '–') + (it.scene_title ? ' — ' + it.scene_title : '') }));
+    }
+    cards.appendChild(imageCard(it, id, refresh, updateStatus));
+  });
+  container.appendChild(cards);
 }
 
 // ---- Router ---------------------------------------------------------------

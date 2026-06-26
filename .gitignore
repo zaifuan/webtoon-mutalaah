@@ -6,3 +6,6 @@ npm-debug.log*
 *.log
 coverage/
 dist/
+
+# Fasa 8 — gambar yang dimuat naik (jangan commit binari)
+uploads/

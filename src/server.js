@@ -15,6 +15,8 @@ const visualsRouter = require('./routes/visuals');
 const promptsRouter = require('./routes/prompts');
 const scriptsRouter = require('./routes/scripts');
 const reviewRouter = require('./routes/review');
+const imagesRouter = require('./routes/images');
+const imageAssetService = require('./services/imageAssetService');
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -65,6 +67,11 @@ app.use('/api', scriptsRouter);
 // /panels/:id/review, /projects/:id/review/export.
 app.use('/api', reviewRouter);
 
+// Fasa 8 — local image workflow. Merangkumi /projects/:id/images,
+// /panels/:id/image, /panels/:id/image/upload, /projects/:id/images/import-local,
+// /images/:id (PUT & DELETE).
+app.use('/api', imagesRouter);
+
 // Apa-apa laluan /api/* yang tidak dikenali → 404 JSON yang kemas.
 app.use('/api', (req, res) => {
   res.status(404).json({ ok: false, error: 'Laluan API tidak dijumpai' });
@@ -74,6 +81,11 @@ app.use('/api', (req, res) => {
 // Frontend statik (mobile-first, tanpa React)
 // ---------------------------------------------------------------------------
 app.use(express.static(path.join(__dirname, '..', 'public')));
+
+// Fasa 8 — sajikan gambar yang dimuat naik secara statik di /uploads/images/...
+// Pastikan folder asas wujud (uploads/images) supaya muat naik & import berfungsi.
+imageAssetService.ensureBaseDirSync();
+app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
 // ---------------------------------------------------------------------------
 // Mula pelayan
