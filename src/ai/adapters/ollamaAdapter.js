@@ -13,6 +13,7 @@
 // ===========================================================================
 
 const config = require('../config');
+const builder = require('../../prompts/builder');
 
 const PROVIDER = 'ollama';
 
@@ -41,14 +42,12 @@ async function ollamaFetch(pathname, options, timeoutMs) {
   }
 }
 
-// Panggil /api/chat. Pulang { ok, latency, content } atau { ok:false, error }.
-async function chat(system, user) {
+// Panggil /api/chat dengan senarai mesej (dibina oleh Prompt Builder).
+// Pulang { ok, latency, content } atau { ok:false, error }.
+async function chat(messages) {
   const body = {
     model: config.OLLAMA_MODEL,
-    messages: [
-      { role: 'system', content: system },
-      { role: 'user', content: user }
-    ],
+    messages: messages,
     stream: false,
     options: { temperature: config.OLLAMA_TEMPERATURE }
   };
@@ -109,45 +108,48 @@ async function generateScript(payload) {
   if (!payloadHasContext(payload)) {
     return result(true, { latency_ms: 0, note: 'payload tidak lengkap — respons fallback tempatan', text_ms: '', text_ar: '', emotion: 'calm', incomplete_payload: true });
   }
-  const system = 'Anda penolong skrip webtoon Mutalaah. Balas HANYA satu objek JSON sah dengan kunci text_ms, text_ar, emotion, notes. emotion mesti salah satu daripada: calm, solemn, sad, happy, neutral, wonder, respectful. Jangan tambah teks lain di luar JSON.';
-  const user = 'Konteks panel (JSON):\n' + contextString(payload) + '\n\nHasilkan satu baris skrip ringkas dalam Bahasa Melayu untuk panel ini.';
-  const r = await chat(system, user);
-  if (!r.ok) return result(false, { latency_ms: r.latency, error: r.error, timeout: !!r.timeout });
+  let built;
+  try { built = await builder.buildGenerateScriptPrompt(payload); }
+  catch (e) { return result(false, { latency_ms: 0, error: 'Prompt builder gagal: ' + (e && e.message ? e.message : String(e)) }); }
+  const r = await chat(built.messages);
+  if (!r.ok) return result(false, { latency_ms: r.latency, error: r.error, timeout: !!r.timeout, prompt_version: built.version });
   const j = tryParseJson(r.content);
   if (j) {
-    return result(true, { latency_ms: r.latency, text_ms: j.text_ms || '', text_ar: j.text_ar || '', emotion: j.emotion || 'calm', notes: j.notes || '' });
+    return result(true, { latency_ms: r.latency, prompt_version: built.version, text_ms: j.text_ms || '', text_ar: j.text_ar || '', emotion: j.emotion || 'calm', notes: j.notes || '' });
   }
-  return result(true, { latency_ms: r.latency, raw_text: r.content, note: 'model tidak menghasilkan JSON sah' });
+  return result(true, { latency_ms: r.latency, prompt_version: built.version, raw_text: r.content, note: 'model tidak menghasilkan JSON sah' });
 }
 
 async function generatePrompt(payload) {
   if (!payloadHasContext(payload)) {
     return result(true, { latency_ms: 0, note: 'payload tidak lengkap — respons fallback tempatan', prompt_text: '', negative_prompt: '', incomplete_payload: true });
   }
-  const system = 'Anda penolong arahan imej (image prompt) untuk webtoon. Balas HANYA satu objek JSON sah dengan kunci prompt_text, negative_prompt, notes. Tulis dalam Bahasa Inggeris. Jangan tambah teks lain.';
-  const user = 'Konteks panel (JSON):\n' + contextString(payload) + '\n\nHasilkan prompt imej dan negative prompt yang sesuai.';
-  const r = await chat(system, user);
-  if (!r.ok) return result(false, { latency_ms: r.latency, error: r.error, timeout: !!r.timeout });
+  let built;
+  try { built = await builder.buildGeneratePromptPrompt(payload); }
+  catch (e) { return result(false, { latency_ms: 0, error: 'Prompt builder gagal: ' + (e && e.message ? e.message : String(e)) }); }
+  const r = await chat(built.messages);
+  if (!r.ok) return result(false, { latency_ms: r.latency, error: r.error, timeout: !!r.timeout, prompt_version: built.version });
   const j = tryParseJson(r.content);
   if (j) {
-    return result(true, { latency_ms: r.latency, prompt_text: j.prompt_text || '', negative_prompt: j.negative_prompt || '', notes: j.notes || '' });
+    return result(true, { latency_ms: r.latency, prompt_version: built.version, prompt_text: j.prompt_text || '', negative_prompt: j.negative_prompt || '', notes: j.notes || '' });
   }
-  return result(true, { latency_ms: r.latency, raw_text: r.content, note: 'model tidak menghasilkan JSON sah' });
+  return result(true, { latency_ms: r.latency, prompt_version: built.version, raw_text: r.content, note: 'model tidak menghasilkan JSON sah' });
 }
 
 async function review(payload) {
   if (!payloadHasContext(payload)) {
     return result(true, { latency_ms: 0, note: 'payload tidak lengkap — respons fallback tempatan', qa_status: 'ok', issues: [] });
   }
-  const system = 'Anda penyemak QA webtoon. Balas HANYA satu objek JSON sah dengan kunci qa_status, issues, notes. qa_status mesti salah satu daripada: ok, warning, error. issues ialah array string. Jangan tambah teks lain.';
-  const user = 'Konteks panel/skrip/visual/prompt (JSON):\n' + contextString(payload) + '\n\nSemak dan beri keputusan QA ringkas.';
-  const r = await chat(system, user);
-  if (!r.ok) return result(false, { latency_ms: r.latency, error: r.error, timeout: !!r.timeout });
+  let built;
+  try { built = await builder.buildReviewPrompt(payload); }
+  catch (e) { return result(false, { latency_ms: 0, error: 'Prompt builder gagal: ' + (e && e.message ? e.message : String(e)) }); }
+  const r = await chat(built.messages);
+  if (!r.ok) return result(false, { latency_ms: r.latency, error: r.error, timeout: !!r.timeout, prompt_version: built.version });
   const j = tryParseJson(r.content);
   if (j) {
-    return result(true, { latency_ms: r.latency, qa_status: j.qa_status || 'ok', issues: Array.isArray(j.issues) ? j.issues : [], notes: j.notes || '' });
+    return result(true, { latency_ms: r.latency, prompt_version: built.version, qa_status: j.qa_status || 'ok', issues: Array.isArray(j.issues) ? j.issues : [], notes: j.notes || '' });
   }
-  return result(true, { latency_ms: r.latency, raw_text: r.content, qa_status: 'warning', issues: ['model tidak menghasilkan JSON sah'] });
+  return result(true, { latency_ms: r.latency, prompt_version: built.version, raw_text: r.content, qa_status: 'warning', issues: ['model tidak menghasilkan JSON sah'] });
 }
 
 // ---- FALLBACK SELAMAT (fungsi lain) ----------------------------------------

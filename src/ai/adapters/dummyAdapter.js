@@ -10,6 +10,8 @@
 
 const LATENCY_MS = 1000;
 
+const builder = require('../../prompts/builder');
+
 function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 
 function dummyResult(extra) {
@@ -27,6 +29,15 @@ async function run(kind, payload) {
   return dummyResult({ kind: kind });
 }
 
+// Fasa 11B: dummy juga MESTI guna Prompt Builder (bina mesej via builder,
+// kemudian pulang respons simulasi). Tiada prompt dibina dalam adapter.
+async function runWithBuilder(kind, taskTemplate, payload) {
+  let built = null;
+  try { built = await builder.buildByTask(taskTemplate, payload); } catch (e) { built = null; }
+  await sleep(LATENCY_MS);
+  return dummyResult({ kind: kind, prompt_version: built ? built.version : null, prompt_template: built ? built.template : null });
+}
+
 module.exports = {
   name: 'dummy',
   info: {
@@ -42,10 +53,10 @@ module.exports = {
   async generateCharacter(payload) { return run('generateCharacter', payload); },
   async generateScene(payload) { return run('generateScene', payload); },
   async generatePanel(payload) { return run('generatePanel', payload); },
-  async generateScript(payload) { return run('generateScript', payload); },
+  async generateScript(payload) { return runWithBuilder('generateScript', 'generate_script', payload); },
   async generateVisual(payload) { return run('generateVisual', payload); },
-  async generatePrompt(payload) { return run('generatePrompt', payload); },
+  async generatePrompt(payload) { return runWithBuilder('generatePrompt', 'generate_prompt', payload); },
   async generateImage(payload) { return run('generateImage', payload); },
-  async review(payload) { return run('review', payload); },
+  async review(payload) { return runWithBuilder('review', 'review', payload); },
   async export(payload) { return run('export', payload); }
 };

@@ -21,6 +21,7 @@ const jobsRouter = require('./routes/jobs');
 const workersRouter = require('./routes/workers');
 const productionEngine = require('./services/productionEngine');
 const aiRouter = require('./routes/ai');
+const promptContextRouter = require('./routes/promptContext');
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -83,6 +84,9 @@ app.use('/api', workersRouter);
 
 // Fasa 10 — AI Worker abstraction. /ai/providers, /ai/default (GET & POST).
 app.use('/api', aiRouter);
+
+// Fasa 11B — Prompt Context Builder preview. /prompts/context, /prompts/templates.
+app.use('/api', promptContextRouter);
 
 // Apa-apa laluan /api/* yang tidak dikenali → 404 JSON yang kemas.
 app.use('/api', (req, res) => {

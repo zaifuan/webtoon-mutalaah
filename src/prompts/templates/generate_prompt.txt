@@ -1,0 +1,14 @@
+TASK: Produce an English image prompt for the following webtoon panel.
+
+Panel: {{PANEL}}
+Visual: {{VISUAL}}
+Character: {{CHARACTER}}
+
+Reply with ONLY one valid JSON object, no other text:
+{"prompt_text":"...","negative_prompt":"...","notes":""}
+
+Notes:
+- For noble figures (prophets), the face must be fully replaced by soft glowing light: no eyes, no nose, no mouth, no facial features. Add these constraints to negative_prompt.
+- Keep the prompt concise and concrete.
+
+{{USER_INPUT}}

@@ -262,6 +262,12 @@ const api = {
   },
   getProviderHealth(provider) {
     return this.req('GET', '/api/ai/providers/' + encodeURIComponent(provider) + '/health');
+  },
+  getPromptTemplates() {
+    return this.req('GET', '/api/prompts/templates');
+  },
+  previewPromptContext(task, payload) {
+    return this.req('POST', '/api/prompts/context', { task: task, payload: payload || {} });
   }
 };
 
@@ -2917,11 +2923,12 @@ async function renderProductionTab(id, container, updateStatus) {
 
   function reload() { renderProductionTab(id, container, updateStatus); }
 
-  let data, wdata, ai;
+  let data, wdata, ai, tpls;
   try {
     data = await api.listJobs(productionFilter);
     wdata = await api.listWorkers();
     ai = await api.getAiProviders();
+    tpls = await api.getPromptTemplates();
   } catch (err) {
     container.innerHTML = '';
     container.appendChild(el('p', { class: 'error-text', text: 'Gagal memuatkan: ' + err.message }));
@@ -3015,6 +3022,53 @@ async function renderProductionTab(id, container, updateStatus) {
     el('p', { class: 'pr-muted', text: aiDefault === 'dummy'
       ? 'Provider dummy: respons simulasi (success:true, cost:0). Engine tidak tahu model AI yang digunakan.'
       : 'Provider ollama (pilihan, tempatan). Jika Ollama tidak berjalan, job gagal secara terkawal — sistem tidak crash. Default sistem kekal dummy.' })
+  ]));
+
+  // Prompt Builder (Fasa 11B) — single source of truth untuk semua prompt.
+  const pbVersion = (tpls && tpls.version) || 'v1';
+  const pbTemplates = (tpls && tpls.templates) || [];
+  const taskSel = el('select', { class: 'pr-select' }, [
+    el('option', { value: 'generate_script', text: 'generate_script' }),
+    el('option', { value: 'generate_prompt', text: 'generate_prompt' }),
+    el('option', { value: 'review', text: 'review' }),
+    el('option', { value: 'system', text: 'system' })
+  ]);
+  const sysOut = el('textarea', { class: 'field-input pb-out', rows: '4', readonly: 'readonly', placeholder: 'System prompt…' });
+  const userOut = el('textarea', { class: 'field-input pb-out', rows: '4', readonly: 'readonly', placeholder: 'User prompt…' });
+  const msgOut = el('textarea', { class: 'field-input pb-out', rows: '5', readonly: 'readonly', placeholder: 'Messages JSON…' });
+  const previewBtn = el('button', { class: 'btn btn-primary btn-sm', type: 'button', text: 'Preview Context' });
+  previewBtn.addEventListener('click', async function () {
+    previewBtn.disabled = true; const lbl = previewBtn.textContent; previewBtn.textContent = 'Membina…';
+    const samplePayload = {
+      project: { title_ms: 'Musa & Khidir', language: 'ms' },
+      scene: { scene_no: 1, title_ms: 'Pertemuan' },
+      panel: { panel_no: 1, panel_type: 'establishing' },
+      task: 'SCRIPT_GENERATION'
+    };
+    try {
+      const built = await api.previewPromptContext(taskSel.value, samplePayload);
+      sysOut.value = built.system || '';
+      userOut.value = built.user || '';
+      msgOut.value = JSON.stringify(built.messages || [], null, 2);
+      toast('Context dibina (' + (built.version || pbVersion) + ')', 'ok');
+    } catch (e) { toast('Gagal: ' + e.message, 'error'); }
+    previewBtn.disabled = false; previewBtn.textContent = lbl;
+  });
+
+  container.appendChild(el('div', { class: 'pr-pb' }, [
+    el('div', { class: 'pr-ai-row' }, [
+      el('span', { class: 'pr-ai-label', text: 'Prompt Builder' }),
+      el('span', { class: 'pr-pill pr-ai-cur', text: pbVersion }),
+      el('span', { class: 'pr-muted', text: 'Template: ' + (pbTemplates.length ? pbTemplates.join(', ') : '—') })
+    ]),
+    el('div', { class: 'pr-ai-row' }, [
+      el('label', { class: 'pr-ctrl' }, [el('span', { class: 'pr-ctrl-lbl', text: 'Task' }), taskSel]),
+      previewBtn
+    ]),
+    el('label', { class: 'prompt-field-label', text: 'System Prompt' }), sysOut,
+    el('label', { class: 'prompt-field-label', text: 'User Prompt' }), userOut,
+    el('label', { class: 'prompt-field-label', text: 'Messages JSON' }), msgOut,
+    el('p', { class: 'pr-muted', text: 'Read-only. Semua adapter (dummy/ollama/akan datang) menggunakan builder ini. Template dalam src/prompts/templates/.' })
   ]));
 
   // Summary

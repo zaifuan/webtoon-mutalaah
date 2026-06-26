@@ -1,0 +1,15 @@
+TUGAS: Hasilkan satu baris skrip ringkas dalam Bahasa Melayu untuk panel berikut.
+
+Watak: {{CHARACTER}}
+Babak: {{SCENE}}
+Panel: {{PANEL}}
+Skrip sedia ada: {{SCRIPT}}
+
+Balas HANYA satu objek JSON sah, tanpa teks lain:
+{"text_ms":"...","text_ar":"","emotion":"calm","notes":""}
+
+Nota:
+- "emotion" mesti salah satu daripada: calm, solemn, sad, happy, neutral, wonder, respectful.
+- "text_ar" boleh dikosongkan jika tiada teks Arab.
+
+{{USER_INPUT}}

@@ -1,0 +1,16 @@
+TUGAS: Semak QA panel webtoon dan beri keputusan ringkas.
+
+Panel: {{PANEL}}
+Skrip: {{SCRIPT}}
+Visual: {{VISUAL}}
+Prompt: {{PROMPT}}
+
+Balas HANYA satu objek JSON sah, tanpa teks lain:
+{"qa_status":"ok","issues":[],"notes":""}
+
+Nota:
+- "qa_status" mesti salah satu daripada: ok, warning, error.
+- "issues" ialah array ayat ringkas (Bahasa Melayu) jika ada masalah.
+- Tandai error jika tokoh mulia dipaparkan dengan wajah.
+
+{{USER_INPUT}}

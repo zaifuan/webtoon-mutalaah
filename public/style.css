@@ -1548,6 +1548,8 @@ select.field-input {
 .pr-health--online { background: rgba(47, 143, 134, 0.16); border-color: rgba(47, 143, 134, 0.5); color: #1f6b63; }
 .pr-health--offline { background: rgba(176, 58, 58, 0.14); border-color: rgba(176, 58, 58, 0.5); color: #b03a3a; }
 .pr-health--unknown { background: var(--paper-edge); border-color: var(--line); color: var(--muted); }
+.pr-pb { border: 1.5px solid var(--ink); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 12px; background: var(--paper); display: flex; flex-direction: column; gap: 6px; }
+.pr-pb .pb-out { font-family: var(--mono, monospace); font-size: 0.74rem; }
 
 /* --- Fokus papan kekunci --- */
 :focus-visible {
