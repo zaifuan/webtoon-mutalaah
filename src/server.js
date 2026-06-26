@@ -20,6 +20,7 @@ const imageAssetService = require('./services/imageAssetService');
 const jobsRouter = require('./routes/jobs');
 const workersRouter = require('./routes/workers');
 const productionEngine = require('./services/productionEngine');
+const aiRouter = require('./routes/ai');
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -79,6 +80,9 @@ app.use('/api', imagesRouter);
 // /jobs/:id/start|complete|fail|retry|cancel) dan /workers (+ register/heartbeat).
 app.use('/api', jobsRouter);
 app.use('/api', workersRouter);
+
+// Fasa 10 — AI Worker abstraction. /ai/providers, /ai/default (GET & POST).
+app.use('/api', aiRouter);
 
 // Apa-apa laluan /api/* yang tidak dikenali → 404 JSON yang kemas.
 app.use('/api', (req, res) => {

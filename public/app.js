@@ -250,6 +250,15 @@ const api = {
   },
   listWorkers() {
     return this.req('GET', '/api/workers');
+  },
+  getAiProviders() {
+    return this.req('GET', '/api/ai/providers');
+  },
+  getAiDefault() {
+    return this.req('GET', '/api/ai/default');
+  },
+  setAiDefault(provider) {
+    return this.req('POST', '/api/ai/default', { provider: provider });
   }
 };
 
@@ -2846,7 +2855,8 @@ function jobRow(job, reload, updateStatus) {
   ]);
 }
 
-function workerRow(w) {
+function workerRow(w, aiInfo) {
+  const ai = aiInfo || { name: 'dummy', model: 'dummy-model', latency_ms: 1000 };
   return el('div', { class: 'pr-worker' }, [
     el('div', {}, [
       el('span', { class: 'pr-worker-name', text: w.worker_name }),
@@ -2855,6 +2865,11 @@ function workerRow(w) {
     el('div', { class: 'pr-worker-meta' }, [
       el('span', { class: 'pr-muted', text: 'heartbeat: ' + relTime(w.last_heartbeat) }),
       el('span', { class: 'pr-muted', text: 'job: ' + (w.current_job != null ? '#' + w.current_job : '—') }),
+      el('span', { class: 'pr-muted', text: 'provider: ' + (ai.name || 'dummy') }),
+      el('span', { class: 'pr-muted', text: 'model: ' + (ai.model || '—') }),
+      el('span', { class: 'pr-muted', text: 'latency: ' + (ai.latency_ms != null ? ai.latency_ms + 'ms' : '—') })
+    ]),
+    el('div', { class: 'pr-worker-meta' }, [
       el('span', { class: 'pr-muted', text: 'CPU ' + (w.cpu_usage != null ? w.cpu_usage + '%' : '—') }),
       el('span', { class: 'pr-muted', text: 'RAM ' + (w.ram_usage != null ? w.ram_usage + '%' : '—') }),
       el('span', { class: 'pr-muted', text: 'GPU ' + (w.gpu_usage != null ? w.gpu_usage + '%' : '—') })
@@ -2899,10 +2914,11 @@ async function renderProductionTab(id, container, updateStatus) {
 
   function reload() { renderProductionTab(id, container, updateStatus); }
 
-  let data, wdata;
+  let data, wdata, ai;
   try {
     data = await api.listJobs(productionFilter);
     wdata = await api.listWorkers();
+    ai = await api.getAiProviders();
   } catch (err) {
     container.innerHTML = '';
     container.appendChild(el('p', { class: 'error-text', text: 'Gagal memuatkan: ' + err.message }));
@@ -2914,6 +2930,9 @@ async function renderProductionTab(id, container, updateStatus) {
   const js = (data && data.summary) || {};
   const workers = (wdata && wdata.workers) || [];
   const ws = (wdata && wdata.summary) || {};
+  const aiProviders = (ai && ai.providers) || [];
+  const aiDefault = (ai && ai.default) || 'dummy';
+  const aiDefInfo = (aiProviders.find(function (p) { return p.name === aiDefault; }) || {}).info || { name: aiDefault, model: 'dummy-model', latency_ms: 1000 };
 
   // Header + butang
   const createToggle = el('button', { class: 'btn btn-primary', type: 'button', text: productionFormOpen ? '× Tutup' : '＋ Cipta Job' });
@@ -2942,6 +2961,25 @@ async function renderProductionTab(id, container, updateStatus) {
 
   if (productionFormOpen) container.appendChild(buildCreateJobForm(id, reload));
 
+  // AI Provider (Fasa 10) — Production Engine hanya tahu adapter, bukan model.
+  const provSel = el('select', { class: 'pr-select' }, aiProviders.map(function (p) {
+    return el('option', { value: p.name, text: p.name + (p.info && p.info.model ? ' (' + p.info.model + ')' : '') });
+  }));
+  provSel.value = aiDefault;
+  provSel.addEventListener('change', async function () {
+    try { await api.setAiDefault(provSel.value); toast('Provider ditukar: ' + provSel.value, 'ok'); reload(); }
+    catch (e) { toast('Gagal: ' + e.message, 'error'); }
+  });
+  container.appendChild(el('div', { class: 'pr-ai' }, [
+    el('div', { class: 'pr-ai-row' }, [
+      el('span', { class: 'pr-ai-label', text: 'AI Provider' }),
+      el('span', { class: 'pr-pill pr-ai-cur', text: aiDefault }),
+      el('span', { class: 'pr-muted', text: 'model: ' + (aiDefInfo.model || '—') + ' · latency: ' + (aiDefInfo.latency_ms != null ? aiDefInfo.latency_ms + 'ms' : '—') })
+    ]),
+    el('label', { class: 'pr-ctrl' }, [el('span', { class: 'pr-ctrl-lbl', text: 'Tukar provider' }), provSel]),
+    el('p', { class: 'pr-muted', text: 'Semua respons adalah simulasi (success:true, cost:0). Engine tidak tahu model AI yang digunakan.' })
+  ]));
+
   // Summary
   container.appendChild(el('h3', { class: 'pr-section-h', text: 'Ringkasan Job' }));
   container.appendChild(el('div', { class: 'pr-summary' }, [
@@ -2960,7 +2998,7 @@ async function renderProductionTab(id, container, updateStatus) {
   ]));
   if (workers.length) {
     const wl = el('div', { class: 'pr-workers' });
-    workers.forEach(function (w) { wl.appendChild(workerRow(w)); });
+    workers.forEach(function (w) { wl.appendChild(workerRow(w, aiDefInfo)); });
     container.appendChild(wl);
   } else {
     container.appendChild(el('p', { class: 'pr-muted', text: 'Tiada worker berdaftar lagi.' }));

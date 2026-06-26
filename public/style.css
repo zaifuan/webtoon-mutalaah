@@ -1540,6 +1540,12 @@ select.field-input {
   .pr-summary { grid-template-columns: repeat(2, 1fr); }
 }
 
+/* --- Fasa 10: AI Provider (dalam tab Production) --- */
+.pr-ai { border: 1.5px solid var(--teal); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 12px; background: rgba(47, 143, 134, 0.05); display: flex; flex-direction: column; gap: 6px; }
+.pr-ai-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pr-ai-label { font-family: var(--display); font-weight: 700; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--teal); }
+.pr-ai-cur { background: rgba(47, 143, 134, 0.16); border-color: rgba(47, 143, 134, 0.5); color: #1f6b63; }
+
 /* --- Fokus papan kekunci --- */
 :focus-visible {
   outline: 2px solid var(--gold);

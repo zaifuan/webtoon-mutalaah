@@ -10,6 +10,7 @@
 // ===========================================================================
 
 const pool = require('../db/pool');
+const aiAdapter = require('../ai/adapter');
 
 const JOB_TYPES = [
   'TEXT_PARSE', 'CHARACTER_GENERATION', 'SCENE_GENERATION', 'PANEL_GENERATION',
@@ -149,8 +150,10 @@ async function dummyTick() {
     if (job) {
       await heartbeat(DUMMY_NAME, { status: 'busy', current_job: job.id, cpu_usage: rand(40, 85), ram_usage: rand(40, 80), gpu_usage: 0 });
       await startJob(job.id, DUMMY_NAME);
-      await sleep(3000); // simulasi kerja (TIADA AI / image generation)
-      await completeJob(job.id, { simulated: true, job_type: job.job_type, message: 'dummy worker selesai', finished_at: new Date().toISOString() });
+      // Fasa 10: worker TIDAK lagi sleep() sendiri — ia memanggil AI Adapter.
+      // Dummy adapter masih sleep(1000) → behaviour sistem kekal sama.
+      const aiResult = await aiAdapter.runJob(job.job_type, job.payload_json);
+      await completeJob(job.id, Object.assign({ simulated: true, finished_at: new Date().toISOString() }, aiResult));
       await heartbeat(DUMMY_NAME, { status: 'online', current_job: null, cpu_usage: rand(3, 20), ram_usage: rand(20, 50), gpu_usage: 0 });
     }
   } catch (e) {
@@ -164,7 +167,7 @@ function startDummyWorker() {
   if (dummyTimer) return;
   dummyTimer = setInterval(function () { dummyTick(); }, 2000);
   if (dummyTimer.unref) dummyTimer.unref();
-  console.log('[production] dummy worker dimulakan (' + DUMMY_NAME + ', simulasi sleep 3s)');
+  console.log('[production] dummy worker dimulakan (' + DUMMY_NAME + ', melalui AI adapter)');
 }
 function stopDummyWorker() {
   if (dummyTimer) { clearInterval(dummyTimer); dummyTimer = null; }
