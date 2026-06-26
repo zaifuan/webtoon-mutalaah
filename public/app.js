@@ -228,6 +228,28 @@ const api = {
   },
   deleteImage(imageId) {
     return this.req('DELETE', '/api/images/' + imageId);
+  },
+  listJobs(params) {
+    const qs = params ? ('?' + Object.keys(params).filter(function (k) { return params[k] !== '' && params[k] != null; }).map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]); }).join('&')) : '';
+    return this.req('GET', '/api/jobs' + qs);
+  },
+  getJob(jobId) {
+    return this.req('GET', '/api/jobs/' + jobId);
+  },
+  createJob(payload) {
+    return this.req('POST', '/api/jobs', payload);
+  },
+  deleteJob(jobId) {
+    return this.req('DELETE', '/api/jobs/' + jobId);
+  },
+  retryJob(jobId) {
+    return this.req('POST', '/api/jobs/' + jobId + '/retry', {});
+  },
+  cancelJob(jobId) {
+    return this.req('POST', '/api/jobs/' + jobId + '/cancel', {});
+  },
+  listWorkers() {
+    return this.req('GET', '/api/workers');
   }
 };
 
@@ -668,9 +690,11 @@ async function renderDetail(id) {
   const tabPrompt = el('button', { class: 'tab', type: 'button', text: 'Prompt' });
   const tabReview = el('button', { class: 'tab', type: 'button', text: 'Review' });
   const tabImage = el('button', { class: 'tab', type: 'button', text: 'Image' });
+  const tabProduction = el('button', { class: 'tab', type: 'button', text: 'Production' });
   const content = el('div', { class: 'tab-content' });
 
   function setTab(name) {
+    clearProductionPolling();
     tabTeks.className = 'tab';
     tabWatak.className = 'tab';
     tabBabak.className = 'tab';
@@ -680,6 +704,7 @@ async function renderDetail(id) {
     tabPrompt.className = 'tab';
     tabReview.className = 'tab';
     tabImage.className = 'tab';
+    tabProduction.className = 'tab';
     if (name === 'watak') {
       tabWatak.className = 'tab is-active';
       renderCharacterTab(id, content, updateStatus);
@@ -704,6 +729,9 @@ async function renderDetail(id) {
     } else if (name === 'image') {
       tabImage.className = 'tab is-active';
       renderImageTab(id, content, updateStatus);
+    } else if (name === 'production') {
+      tabProduction.className = 'tab is-active';
+      renderProductionTab(id, content, updateStatus);
     } else {
       tabTeks.className = 'tab is-active';
       renderTextTab(id, content, updateStatus);
@@ -720,8 +748,9 @@ async function renderDetail(id) {
   tabPrompt.addEventListener('click', function () { setTab('prompt'); });
   tabReview.addEventListener('click', function () { setTab('review'); });
   tabImage.addEventListener('click', function () { setTab('image'); });
+  tabProduction.addEventListener('click', function () { setTab('production'); });
 
-  view.appendChild(el('div', { class: 'tabs' }, [tabTeks, tabWatak, tabBabak, tabPanel, tabScript, tabVisual, tabPrompt, tabReview, tabImage]));
+  view.appendChild(el('div', { class: 'tabs' }, [tabTeks, tabWatak, tabBabak, tabPanel, tabScript, tabVisual, tabPrompt, tabReview, tabImage, tabProduction]));
   view.appendChild(content);
   setTab('teks');
 }
@@ -2729,6 +2758,257 @@ async function renderImageTab(id, container, updateStatus) {
     cards.appendChild(imageCard(it, id, refresh, updateStatus));
   });
   container.appendChild(cards);
+}
+
+// ---- Tab: Production (Production Engine, Fasa 9) ---------------------------
+const JOB_TYPES_CLIENT = ['TEXT_PARSE', 'CHARACTER_GENERATION', 'SCENE_GENERATION', 'PANEL_GENERATION', 'SCRIPT_GENERATION', 'VISUAL_GENERATION', 'PROMPT_GENERATION', 'IMAGE_GENERATION', 'REVIEW', 'EXPORT'];
+const PRIORITIES_CLIENT = ['high', 'normal', 'low'];
+const ACTIVE_STATUS = ['pending', 'claimed', 'running'];
+let productionPollTimer = null;
+let productionAuto = false;
+let productionFormOpen = false;
+let productionFilter = { status: '', priority: '', q: '', sort: '' };
+
+function clearProductionPolling() {
+  if (productionPollTimer) { clearInterval(productionPollTimer); productionPollTimer = null; }
+}
+function isProductionActive() {
+  const a = document.querySelector('.tabs .tab.is-active');
+  return a && a.textContent === 'Production';
+}
+function relTime(iso) {
+  if (!iso) return '—';
+  const t = new Date(iso).getTime();
+  if (isNaN(t)) return '—';
+  const s = Math.max(0, Math.round((Date.now() - t) / 1000));
+  if (s < 60) return s + 's lalu';
+  if (s < 3600) return Math.round(s / 60) + 'm lalu';
+  if (s < 86400) return Math.round(s / 3600) + 'j lalu';
+  return Math.round(s / 86400) + 'h lalu';
+}
+function pjElapsed(job) {
+  if (!job.started_at) return '—';
+  const start = new Date(job.started_at).getTime();
+  const end = job.completed_at ? new Date(job.completed_at).getTime() : Date.now();
+  const s = Math.max(0, Math.round((end - start) / 1000));
+  return s + 's';
+}
+
+function prStat(label, value, cls) {
+  return el('div', { class: 'pr-stat' + (cls ? ' ' + cls : '') }, [
+    el('span', { class: 'pr-stat-val', text: String(value) }),
+    el('span', { class: 'pr-stat-key', text: label })
+  ]);
+}
+
+function jobRow(job, reload, updateStatus) {
+  const actions = [];
+  if (ACTIVE_STATUS.indexOf(job.status) !== -1) {
+    const cancelBtn = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', text: 'Cancel' });
+    cancelBtn.addEventListener('click', async function () {
+      try { await api.cancelJob(job.id); toast('Job dibatalkan', 'ok'); reload(); } catch (e) { toast('Gagal: ' + e.message, 'error'); }
+    });
+    actions.push(cancelBtn);
+  }
+  if (job.status === 'failed' || job.status === 'cancelled') {
+    const retryBtn = el('button', { class: 'btn btn-primary btn-sm', type: 'button', text: 'Retry' });
+    retryBtn.addEventListener('click', async function () {
+      try { await api.retryJob(job.id); toast('Job di-retry', 'ok'); reload(); } catch (e) { toast('Gagal: ' + e.message, 'error'); }
+    });
+    actions.push(retryBtn);
+  }
+  const delBtn = el('button', { class: 'btn btn-danger btn-sm', type: 'button', text: 'Padam' });
+  delBtn.addEventListener('click', async function () {
+    if (!window.confirm('Padam job #' + job.id + '?')) return;
+    try { await api.deleteJob(job.id); toast('Job dipadam', 'ok'); reload(); } catch (e) { toast('Gagal: ' + e.message, 'error'); }
+  });
+  actions.push(delBtn);
+
+  const dep = job.depends_on_job ? el('span', { class: 'pr-dep', text: '↳ bergantung #' + job.depends_on_job }) : null;
+
+  return el('div', { class: 'pr-job pr-job--' + job.status }, [
+    el('div', { class: 'pr-job-main' }, [
+      el('div', { class: 'pr-job-head' }, [
+        el('span', { class: 'pr-job-id', text: '#' + job.id }),
+        el('span', { class: 'pr-job-type', text: job.job_type })
+      ]),
+      el('div', { class: 'pr-job-meta' }, [
+        el('span', { class: 'pr-pill pr-pri--' + job.priority, text: job.priority }),
+        el('span', { class: 'pr-pill pr-st--' + job.status, text: job.status }),
+        el('span', { class: 'pr-muted', text: 'worker: ' + (job.worker_name || '—') }),
+        el('span', { class: 'pr-muted', text: 'masa: ' + pjElapsed(job) }),
+        el('span', { class: 'pr-muted', text: 'retry: ' + job.retry_count + '/' + job.max_retry })
+      ]),
+      dep,
+      job.error_message ? el('p', { class: 'pr-err', text: job.error_message }) : null
+    ]),
+    el('div', { class: 'pr-job-actions' }, actions)
+  ]);
+}
+
+function workerRow(w) {
+  return el('div', { class: 'pr-worker' }, [
+    el('div', {}, [
+      el('span', { class: 'pr-worker-name', text: w.worker_name }),
+      el('span', { class: 'pr-pill pr-wk--' + w.status, text: w.status })
+    ]),
+    el('div', { class: 'pr-worker-meta' }, [
+      el('span', { class: 'pr-muted', text: 'heartbeat: ' + relTime(w.last_heartbeat) }),
+      el('span', { class: 'pr-muted', text: 'job: ' + (w.current_job != null ? '#' + w.current_job : '—') }),
+      el('span', { class: 'pr-muted', text: 'CPU ' + (w.cpu_usage != null ? w.cpu_usage + '%' : '—') }),
+      el('span', { class: 'pr-muted', text: 'RAM ' + (w.ram_usage != null ? w.ram_usage + '%' : '—') }),
+      el('span', { class: 'pr-muted', text: 'GPU ' + (w.gpu_usage != null ? w.gpu_usage + '%' : '—') })
+    ])
+  ]);
+}
+
+function buildCreateJobForm(id, reload) {
+  const typeSel = el('select', { class: 'field-input' }, JOB_TYPES_CLIENT.map(function (t) { return el('option', { value: t, text: t }); }));
+  const priSel = el('select', { class: 'field-input' }, PRIORITIES_CLIENT.map(function (p) { return el('option', { value: p, text: p }); }));
+  priSel.value = 'normal';
+  const depInput = el('input', { type: 'number', class: 'field-input', placeholder: 'depends_on_job (pilihan)', min: '1' });
+  const createBtn = el('button', { class: 'btn btn-primary btn-sm', type: 'button', text: 'Cipta' });
+  createBtn.addEventListener('click', async function () {
+    const payload = { job_type: typeSel.value, priority: priSel.value, project_id: id };
+    if (depInput.value) payload.depends_on_job = parseInt(depInput.value, 10);
+    createBtn.disabled = true;
+    try { await api.createJob(payload); toast('Job dicipta', 'ok'); reload(); }
+    catch (e) { toast('Gagal: ' + e.message, 'error'); createBtn.disabled = false; }
+  });
+  return el('div', { class: 'pr-form' }, [
+    el('div', { class: 'pr-form-row' }, [
+      el('label', { class: 'pr-form-label', text: 'Jenis' }), typeSel,
+      el('label', { class: 'pr-form-label', text: 'Priority' }), priSel
+    ]),
+    el('div', { class: 'pr-form-row' }, [depInput, createBtn]),
+    el('p', { class: 'pr-muted', text: 'project_id = ' + id + ' (job generik; worker tidak perlu tahu logik Webtoon).' })
+  ]);
+}
+
+function prSelect(label, value, opts, onChange) {
+  const sel = el('select', { class: 'pr-select' }, opts.map(function (o) { return el('option', { value: o[0], text: o[1] }); }));
+  sel.value = value || '';
+  sel.addEventListener('change', function () { onChange(sel.value); });
+  return el('label', { class: 'pr-ctrl' }, [el('span', { class: 'pr-ctrl-lbl', text: label }), sel]);
+}
+
+async function renderProductionTab(id, container, updateStatus) {
+  clearProductionPolling();
+  container.innerHTML = '';
+  container.appendChild(el('p', { class: 'muted', text: 'Memuatkan production…' }));
+
+  function reload() { renderProductionTab(id, container, updateStatus); }
+
+  let data, wdata;
+  try {
+    data = await api.listJobs(productionFilter);
+    wdata = await api.listWorkers();
+  } catch (err) {
+    container.innerHTML = '';
+    container.appendChild(el('p', { class: 'error-text', text: 'Gagal memuatkan: ' + err.message }));
+    return;
+  }
+  container.innerHTML = '';
+
+  const jobs = (data && data.jobs) || [];
+  const js = (data && data.summary) || {};
+  const workers = (wdata && wdata.workers) || [];
+  const ws = (wdata && wdata.summary) || {};
+
+  // Header + butang
+  const createToggle = el('button', { class: 'btn btn-primary', type: 'button', text: productionFormOpen ? '× Tutup' : '＋ Cipta Job' });
+  createToggle.addEventListener('click', function () { productionFormOpen = !productionFormOpen; reload(); });
+  const refreshBtn = el('button', { class: 'btn btn-ghost', type: 'button', text: 'Refresh' });
+  refreshBtn.addEventListener('click', function () { reload(); });
+  const purgeBtn = el('button', { class: 'btn btn-ghost', type: 'button', text: 'Padam Selesai' });
+  purgeBtn.addEventListener('click', async function () {
+    const done = jobs.filter(function (j) { return j.status === 'completed'; });
+    if (!done.length) { toast('Tiada job selesai', 'ok'); return; }
+    if (!window.confirm('Padam ' + done.length + ' job yang selesai?')) return;
+    try { for (const j of done) await api.deleteJob(j.id); toast('Dipadam', 'ok'); reload(); }
+    catch (e) { toast('Gagal: ' + e.message, 'error'); }
+  });
+  const autoWrap = el('label', { class: 'pr-auto' });
+  const autoCb = el('input', { type: 'checkbox' });
+  autoCb.checked = productionAuto;
+  autoCb.addEventListener('change', function () { productionAuto = autoCb.checked; reload(); });
+  autoWrap.appendChild(autoCb);
+  autoWrap.appendChild(document.createTextNode(' Auto'));
+
+  container.appendChild(el('div', { class: 'pr-head' }, [
+    el('h2', { class: 'pr-title', text: 'Production Engine' }),
+    el('div', { class: 'pr-head-btns' }, [createToggle, refreshBtn, purgeBtn, autoWrap])
+  ]));
+
+  if (productionFormOpen) container.appendChild(buildCreateJobForm(id, reload));
+
+  // Summary
+  container.appendChild(el('h3', { class: 'pr-section-h', text: 'Ringkasan Job' }));
+  container.appendChild(el('div', { class: 'pr-summary' }, [
+    prStat('Pending', js.pending || 0),
+    prStat('Running', js.running || 0, 'pr-stat--run'),
+    prStat('Completed', js.completed || 0, 'pr-stat--ok'),
+    prStat('Failed', js.failed || 0, (js.failed ? 'pr-stat--error' : ''))
+  ]));
+
+  // Worker monitor
+  container.appendChild(el('h3', { class: 'pr-section-h', text: 'Workers' }));
+  container.appendChild(el('div', { class: 'pr-summary pr-summary--wk' }, [
+    prStat('Online', ws.online || 0, 'pr-stat--ok'),
+    prStat('Busy', ws.busy || 0, 'pr-stat--run'),
+    prStat('Offline', ws.offline || 0)
+  ]));
+  if (workers.length) {
+    const wl = el('div', { class: 'pr-workers' });
+    workers.forEach(function (w) { wl.appendChild(workerRow(w)); });
+    container.appendChild(wl);
+  } else {
+    container.appendChild(el('p', { class: 'pr-muted', text: 'Tiada worker berdaftar lagi.' }));
+  }
+
+  // Kawalan filter / cari / susun
+  const controls = el('div', { class: 'pr-controls' }, [
+    prSelect('Status', productionFilter.status, [['', 'Semua'], ['pending', 'pending'], ['claimed', 'claimed'], ['running', 'running'], ['completed', 'completed'], ['failed', 'failed'], ['cancelled', 'cancelled']], function (v) { productionFilter.status = v; reload(); }),
+    prSelect('Priority', productionFilter.priority, [['', 'Semua'], ['high', 'high'], ['normal', 'normal'], ['low', 'low']], function (v) { productionFilter.priority = v; reload(); }),
+    prSelect('Susun', productionFilter.sort, [['', 'Terbaru'], ['oldest', 'Terlama'], ['priority', 'Priority'], ['status', 'Status']], function (v) { productionFilter.sort = v; reload(); })
+  ]);
+  const searchInput = el('input', { type: 'search', class: 'pr-search', placeholder: 'Cari (jenis/worker/ralat)…' });
+  searchInput.value = productionFilter.q;
+  searchInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') { productionFilter.q = searchInput.value; reload(); } });
+  const searchBtn = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', text: 'Cari' });
+  searchBtn.addEventListener('click', function () { productionFilter.q = searchInput.value; reload(); });
+  controls.appendChild(el('label', { class: 'pr-ctrl' }, [el('span', { class: 'pr-ctrl-lbl', text: 'Cari' }), el('div', { class: 'pr-search-wrap' }, [searchInput, searchBtn])]));
+  container.appendChild(controls);
+
+  // Queue (aktif) & History (terminal)
+  const active = jobs.filter(function (j) { return ACTIVE_STATUS.indexOf(j.status) !== -1; });
+  const history = jobs.filter(function (j) { return ACTIVE_STATUS.indexOf(j.status) === -1; });
+
+  container.appendChild(el('h3', { class: 'pr-section-h', text: 'Queue (' + active.length + ')' }));
+  if (active.length) {
+    const al = el('div', { class: 'pr-jobs' });
+    active.forEach(function (j) { al.appendChild(jobRow(j, reload, updateStatus)); });
+    container.appendChild(al);
+  } else {
+    container.appendChild(el('p', { class: 'pr-muted', text: 'Queue kosong.' }));
+  }
+
+  container.appendChild(el('h3', { class: 'pr-section-h', text: 'History (' + history.length + ')' }));
+  if (history.length) {
+    const hl = el('div', { class: 'pr-jobs' });
+    history.forEach(function (j) { hl.appendChild(jobRow(j, reload, updateStatus)); });
+    container.appendChild(hl);
+  } else {
+    container.appendChild(el('p', { class: 'pr-muted', text: 'Tiada sejarah lagi.' }));
+  }
+
+  // Auto-refresh (jika dihidupkan) — berhenti automatik bila keluar tab.
+  if (productionAuto) {
+    productionPollTimer = setInterval(function () {
+      if (!isProductionActive()) { clearProductionPolling(); return; }
+      reload();
+    }, 3000);
+  }
 }
 
 // ---- Router ---------------------------------------------------------------

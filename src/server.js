@@ -17,6 +17,9 @@ const scriptsRouter = require('./routes/scripts');
 const reviewRouter = require('./routes/review');
 const imagesRouter = require('./routes/images');
 const imageAssetService = require('./services/imageAssetService');
+const jobsRouter = require('./routes/jobs');
+const workersRouter = require('./routes/workers');
+const productionEngine = require('./services/productionEngine');
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -72,6 +75,11 @@ app.use('/api', reviewRouter);
 // /images/:id (PUT & DELETE).
 app.use('/api', imagesRouter);
 
+// Fasa 9 — production engine (generik). Merangkumi /jobs (+ /jobs/next,
+// /jobs/:id/start|complete|fail|retry|cancel) dan /workers (+ register/heartbeat).
+app.use('/api', jobsRouter);
+app.use('/api', workersRouter);
+
 // Apa-apa laluan /api/* yang tidak dikenali → 404 JSON yang kemas.
 app.use('/api', (req, res) => {
   res.status(404).json({ ok: false, error: 'Laluan API tidak dijumpai' });
@@ -92,6 +100,11 @@ app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 // ---------------------------------------------------------------------------
 app.listen(PORT, () => {
   console.log(`[webtoon-mutalaah] Pelayan berjalan di port ${PORT}`);
+  // Fasa 9 — mulakan dummy worker in-process (claim → sleep 3s → complete).
+  // Boleh dimatikan dengan DISABLE_DUMMY_WORKER=1 (cth. semasa ujian).
+  if (process.env.DISABLE_DUMMY_WORKER !== '1') {
+    productionEngine.startDummyWorker();
+  }
 });
 
 module.exports = app;
