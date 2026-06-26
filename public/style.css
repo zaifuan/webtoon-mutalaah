@@ -1545,6 +1545,9 @@ select.field-input {
 .pr-ai-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .pr-ai-label { font-family: var(--display); font-weight: 700; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--teal); }
 .pr-ai-cur { background: rgba(47, 143, 134, 0.16); border-color: rgba(47, 143, 134, 0.5); color: #1f6b63; }
+.pr-health--online { background: rgba(47, 143, 134, 0.16); border-color: rgba(47, 143, 134, 0.5); color: #1f6b63; }
+.pr-health--offline { background: rgba(176, 58, 58, 0.14); border-color: rgba(176, 58, 58, 0.5); color: #b03a3a; }
+.pr-health--unknown { background: var(--paper-edge); border-color: var(--line); color: var(--muted); }
 
 /* --- Fokus papan kekunci --- */
 :focus-visible {

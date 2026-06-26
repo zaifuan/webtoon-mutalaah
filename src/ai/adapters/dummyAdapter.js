@@ -35,6 +35,9 @@ module.exports = {
     description: 'Adapter simulasi tempatan (tiada AI sebenar, kos 0).',
     latency_ms: LATENCY_MS
   },
+  async health() {
+    return { ok: true, provider: 'dummy', available: true, latency_ms: 0, model: 'dummy-model', base_url: null };
+  },
   async generateText(payload) { return run('generateText', payload); },
   async generateCharacter(payload) { return run('generateCharacter', payload); },
   async generateScene(payload) { return run('generateScene', payload); },

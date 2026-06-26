@@ -259,6 +259,9 @@ const api = {
   },
   setAiDefault(provider) {
     return this.req('POST', '/api/ai/default', { provider: provider });
+  },
+  getProviderHealth(provider) {
+    return this.req('GET', '/api/ai/providers/' + encodeURIComponent(provider) + '/health');
   }
 };
 
@@ -2961,7 +2964,7 @@ async function renderProductionTab(id, container, updateStatus) {
 
   if (productionFormOpen) container.appendChild(buildCreateJobForm(id, reload));
 
-  // AI Provider (Fasa 10) — Production Engine hanya tahu adapter, bukan model.
+  // AI Provider (Fasa 10/11) — Production Engine hanya tahu adapter, bukan model.
   const provSel = el('select', { class: 'pr-select' }, aiProviders.map(function (p) {
     return el('option', { value: p.name, text: p.name + (p.info && p.info.model ? ' (' + p.info.model + ')' : '') });
   }));
@@ -2970,14 +2973,48 @@ async function renderProductionTab(id, container, updateStatus) {
     try { await api.setAiDefault(provSel.value); toast('Provider ditukar: ' + provSel.value, 'ok'); reload(); }
     catch (e) { toast('Gagal: ' + e.message, 'error'); }
   });
+
+  const baseUrlLine = aiDefInfo.base_url
+    ? el('span', { class: 'pr-muted', text: 'Base URL: ' + aiDefInfo.base_url })
+    : null;
+
+  // Status health + Test Connection
+  const statusBadge = el('span', { class: 'pr-pill pr-health--unknown', text: 'Belum diuji' });
+  const statusDetail = el('span', { class: 'pr-muted', text: '' });
+  const testBtn = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', text: 'Test Connection' });
+  testBtn.addEventListener('click', async function () {
+    testBtn.disabled = true; const lbl = testBtn.textContent; testBtn.textContent = 'Menguji…';
+    statusBadge.className = 'pr-pill pr-health--unknown'; statusBadge.textContent = 'Menguji…'; statusDetail.textContent = '';
+    try {
+      const h = await api.getProviderHealth(aiDefault);
+      if (h && h.ok && h.available) {
+        statusBadge.className = 'pr-pill pr-health--online'; statusBadge.textContent = 'Online';
+        statusDetail.textContent = (h.latency_ms != null ? 'latency: ' + h.latency_ms + 'ms' : '') + (h.models && h.models.length ? ' · ' + h.models.length + ' model' : '');
+      } else {
+        statusBadge.className = 'pr-pill pr-health--offline'; statusBadge.textContent = 'Offline';
+        statusDetail.textContent = (h && h.error ? h.error : 'tidak tersedia') + (h && h.latency_ms != null ? ' · ' + h.latency_ms + 'ms' : '');
+      }
+    } catch (e) {
+      statusBadge.className = 'pr-pill pr-health--offline'; statusBadge.textContent = 'Offline';
+      statusDetail.textContent = e.message;
+    }
+    testBtn.disabled = false; testBtn.textContent = lbl;
+  });
+
   container.appendChild(el('div', { class: 'pr-ai' }, [
     el('div', { class: 'pr-ai-row' }, [
       el('span', { class: 'pr-ai-label', text: 'AI Provider' }),
       el('span', { class: 'pr-pill pr-ai-cur', text: aiDefault }),
-      el('span', { class: 'pr-muted', text: 'model: ' + (aiDefInfo.model || '—') + ' · latency: ' + (aiDefInfo.latency_ms != null ? aiDefInfo.latency_ms + 'ms' : '—') })
+      el('span', { class: 'pr-muted', text: 'Model: ' + (aiDefInfo.model || '—') })
+    ]),
+    baseUrlLine ? el('div', { class: 'pr-ai-row' }, [baseUrlLine]) : null,
+    el('div', { class: 'pr-ai-row' }, [
+      el('span', { class: 'pr-ctrl-lbl', text: 'Status' }), statusBadge, testBtn, statusDetail
     ]),
     el('label', { class: 'pr-ctrl' }, [el('span', { class: 'pr-ctrl-lbl', text: 'Tukar provider' }), provSel]),
-    el('p', { class: 'pr-muted', text: 'Semua respons adalah simulasi (success:true, cost:0). Engine tidak tahu model AI yang digunakan.' })
+    el('p', { class: 'pr-muted', text: aiDefault === 'dummy'
+      ? 'Provider dummy: respons simulasi (success:true, cost:0). Engine tidak tahu model AI yang digunakan.'
+      : 'Provider ollama (pilihan, tempatan). Jika Ollama tidak berjalan, job gagal secara terkawal — sistem tidak crash. Default sistem kekal dummy.' })
   ]));
 
   // Summary

@@ -12,11 +12,14 @@
 
 const registry = require('./adapterRegistry');
 const dummyAdapter = require('./adapters/dummyAdapter');
+const ollamaAdapter = require('./adapters/ollamaAdapter');
 const config = require('./config');
 
 // ---- Bootstrap: daftar adapter terbina + tetapkan default dari config ------
 registry.register('dummy', dummyAdapter);
-// (Fasa 11+: registry.register('ollama', ollamaAdapter); — tanpa ubah engine)
+registry.register('ollama', ollamaAdapter);
+// (Fasa 12+: registry.register('lmstudio', lmStudioAdapter); — tanpa ubah engine)
+// Default kekal 'dummy' melainkan env AI_PROVIDER menetapkan sebaliknya.
 if (registry.has(config.AI_PROVIDER)) registry.setDefault(config.AI_PROVIDER);
 
 // ---- Pemetaan job_type → kaedah adapter ------------------------------------

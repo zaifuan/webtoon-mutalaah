@@ -152,8 +152,24 @@ async function dummyTick() {
       await startJob(job.id, DUMMY_NAME);
       // Fasa 10: worker TIDAK lagi sleep() sendiri — ia memanggil AI Adapter.
       // Dummy adapter masih sleep(1000) → behaviour sistem kekal sama.
-      const aiResult = await aiAdapter.runJob(job.job_type, job.payload_json);
-      await completeJob(job.id, Object.assign({ simulated: true, finished_at: new Date().toISOString() }, aiResult));
+      // Fasa 10/11: worker memanggil AI Adapter. Adapter TIDAK pernah crash —
+      // ia pulang { success:false } jika gagal (cth. Ollama tiada/timeout).
+      let aiResult;
+      try {
+        aiResult = await aiAdapter.runJob(job.job_type, job.payload_json);
+      } catch (e) {
+        aiResult = { success: false, error: 'AI adapter ralat: ' + (e && e.message ? e.message : String(e)) };
+      }
+      if (aiResult && aiResult.success === false) {
+        // Production Engine yang tentukan status: gagal terkawal (retry/failed Fasa 9).
+        const msg = aiResult.error || aiResult.message || 'AI job gagal';
+        await failJob(job.id, msg);
+      } else {
+        await completeJob(job.id, Object.assign({
+          simulated: !!(aiResult && aiResult.provider === 'dummy'),
+          finished_at: new Date().toISOString()
+        }, aiResult));
+      }
       await heartbeat(DUMMY_NAME, { status: 'online', current_job: null, cpu_usage: rand(3, 20), ram_usage: rand(20, 50), gpu_usage: 0 });
     }
   } catch (e) {
