@@ -12,11 +12,14 @@
 
 const registry = require('./adapterRegistry');
 const dummyImageAdapter = require('./adapters/dummyImageAdapter');
+const comfyuiAdapter = require('./adapters/comfyuiAdapter');
 const config = require('./config');
 
 // ---- Bootstrap: daftar adapter terbina + tetapkan default dari config ------
 registry.register('dummy-image', dummyImageAdapter);
-// (Fasa 13+: registry.register('comfyui', comfyUIAdapter); — tanpa ubah engine)
+registry.register('comfyui', comfyuiAdapter);
+// (Fasa 14+: registry.register('forge', forgeAdapter); — tanpa ubah engine)
+// Default kekal 'dummy-image' melainkan env IMAGE_PROVIDER menetapkan sebaliknya.
 if (registry.has(config.IMAGE_PROVIDER)) registry.setDefault(config.IMAGE_PROVIDER);
 
 // ---- Pemetaan job_type → kaedah adapter (IMAGE_GENERATION sahaja dahulu) ----

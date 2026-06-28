@@ -280,6 +280,9 @@ const api = {
   },
   getImageProviderHealth(provider) {
     return this.req('GET', '/api/image/providers/' + encodeURIComponent(provider) + '/health');
+  },
+  testGenerateImage(prompt) {
+    return this.req('POST', '/api/image/test-generate', { prompt: prompt });
   }
 };
 
@@ -3059,10 +3062,20 @@ async function renderProductionTab(id, container, updateStatus) {
       const h = await api.getImageProviderHealth(imgDefault);
       if (h && h.ok && h.available) {
         imgStatusBadge.className = 'pr-pill pr-health--online'; imgStatusBadge.textContent = 'Online';
-        imgStatusDetail.textContent = (h.latency_ms != null ? 'latency: ' + h.latency_ms + 'ms' : '') + (h.model ? ' · ' + h.model : '');
+        const parts = [];
+        if (h.latency_ms != null) parts.push('latency: ' + h.latency_ms + 'ms');
+        if (h.gpu) parts.push('GPU: ' + h.gpu);
+        if (h.vram && h.vram.total != null) {
+          const gb = function (b) { return (b / (1024 * 1024 * 1024)).toFixed(1) + 'GB'; };
+          parts.push('VRAM: ' + (h.vram.free != null ? gb(h.vram.free) + ' bebas / ' : '') + gb(h.vram.total));
+        }
+        if (h.queue != null) parts.push('Queue: ' + h.queue);
+        if (h.version) parts.push('v' + h.version);
+        if (h.model && !h.gpu) parts.push(h.model);
+        imgStatusDetail.textContent = parts.join(' · ');
       } else {
         imgStatusBadge.className = 'pr-pill pr-health--offline'; imgStatusBadge.textContent = 'Offline';
-        imgStatusDetail.textContent = (h && h.error ? h.error : 'tidak tersedia');
+        imgStatusDetail.textContent = (h && h.error ? h.error : 'tidak tersedia') + (h && h.latency_ms != null ? ' · ' + h.latency_ms + 'ms' : '');
       }
     } catch (e) {
       imgStatusBadge.className = 'pr-pill pr-health--offline'; imgStatusBadge.textContent = 'Offline';
@@ -3070,6 +3083,29 @@ async function renderProductionTab(id, container, updateStatus) {
     }
     imgTestBtn.disabled = false; imgTestBtn.textContent = lbl;
   });
+
+  // Fasa 13: Generate Test Image (prompt dummy; tidak masuk Project)
+  const genStatus = el('span', { class: 'pr-muted', text: '' });
+  const genPreview = el('img', { class: 'pr-img-preview', alt: 'Imej ujian', style: 'display:none' });
+  const genBtn = el('button', { class: 'btn btn-primary btn-sm', type: 'button', text: 'Generate Test Image' });
+  genBtn.addEventListener('click', async function () {
+    genBtn.disabled = true; const lbl = genBtn.textContent; genBtn.textContent = 'Menjana…';
+    genStatus.textContent = 'prompt: "A red apple on wooden table"…'; genPreview.style.display = 'none'; genPreview.removeAttribute('src');
+    try {
+      const out = await api.testGenerateImage('A red apple on wooden table');
+      if (out && out.success && out.image && out.image.url) {
+        genStatus.textContent = 'Berjaya (' + (out.provider || '') + (out.latency_ms != null ? ', ' + out.latency_ms + 'ms' : '') + (out.seed != null ? ', seed ' + out.seed : '') + ')';
+        genPreview.src = out.image.url; genPreview.style.display = 'block';
+        toast('Imej ujian dijana', 'ok');
+      } else if (out && out.success && !out.image) {
+        genStatus.textContent = 'Provider ' + (out.provider || '') + ' (simulasi) — tiada imej sebenar.';
+      } else {
+        genStatus.textContent = 'Gagal: ' + ((out && (out.message || out.error)) || 'tidak diketahui');
+      }
+    } catch (e) { genStatus.textContent = 'Gagal: ' + e.message; }
+    genBtn.disabled = false; genBtn.textContent = lbl;
+  });
+
   container.appendChild(el('div', { class: 'pr-ai' }, [
     el('div', { class: 'pr-ai-row' }, [
       el('span', { class: 'pr-ai-label', text: 'Image Provider' }),
@@ -3080,7 +3116,9 @@ async function renderProductionTab(id, container, updateStatus) {
       el('span', { class: 'pr-ctrl-lbl', text: 'Status' }), imgStatusBadge, imgTestBtn, imgStatusDetail
     ]),
     el('label', { class: 'pr-ctrl' }, [el('span', { class: 'pr-ctrl-lbl', text: 'Tukar provider' }), imgProvSel]),
-    el('p', { class: 'pr-muted', text: 'Penjana imej (abstraction, simulasi). Respons dummy (image:null, cost:0). Job IMAGE_GENERATION dirutekan ke Image Adapter; job lain ke AI Adapter.' })
+    el('div', { class: 'pr-ai-row' }, [genBtn, genStatus]),
+    genPreview,
+    el('p', { class: 'pr-muted', text: 'IMAGE_GENERATION dirutekan ke Image Adapter (dummy-image/comfyui). Generate Test Image hanya untuk ujian — tidak masuk Project. Jika ComfyUI offline, job gagal terkawal; Ollama/AI tidak terjejas.' })
   ]));
 
   // Prompt Builder (Fasa 11B) — single source of truth untuk semua prompt.

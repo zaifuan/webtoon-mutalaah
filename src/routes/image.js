@@ -48,4 +48,23 @@ router.get('/image/providers/:provider/health', async (req, res) => {
   return res.json({ ok: true, provider: name, available: true, note: 'tiada health check' });
 });
 
+// Fasa 13: Generate Test Image — guna provider imej SEMASA, prompt dummy.
+// Hanya untuk ujian; TIDAK masuk mana-mana Project / tiada baris DB.
+router.post('/image/test-generate', async (req, res) => {
+  const body = req.body || {};
+  const prompt = body.prompt || 'A red apple on wooden table';
+  const payload = {
+    prompt: prompt,
+    negative_prompt: body.negative_prompt || '',
+    subfolder: '_test'
+  };
+  if (body.workflow) payload.workflow = body.workflow;
+  try {
+    const out = await imageAdapter.generateImage(payload);
+    return res.json(out);
+  } catch (e) {
+    return res.json({ success: false, provider: registry.getDefault(), error: e && e.message ? e.message : 'Generate gagal' });
+  }
+});
+
 module.exports = router;
