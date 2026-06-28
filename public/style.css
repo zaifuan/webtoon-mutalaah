@@ -1563,6 +1563,65 @@ select.field-input {
 .pl-fill--fail { background: #b03a3a; }
 .pl-live { display: flex; align-items: center; gap: 8px; padding-left: 4px; }
 
+/* --- Fasa 15: Webtoon Preview reader --- */
+.pv-toolbar { display: flex; flex-direction: column; gap: 8px; padding: 8px 10px; border: 1.5px solid var(--line); border-radius: var(--radius); margin-bottom: 10px; background: var(--paper); position: sticky; top: 0; z-index: 5; }
+.pv-toolbar-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.pv-opt { display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem; }
+.pv-ctrl { display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem; }
+.pv-ctrl > span { color: var(--muted); }
+.pv-search { max-width: 220px; }
+.pv-empty { padding: 24px; text-align: center; }
+.pv-reader { display: flex; gap: 12px; align-items: flex-start; }
+.pv-sidebar { flex: 0 0 200px; max-height: 78vh; overflow-y: auto; border: 1.5px solid var(--line); border-radius: var(--radius); padding: 8px; background: var(--paper); position: sticky; top: 96px; }
+.pv-side-title { font-family: var(--display); font-weight: 700; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--teal); margin-bottom: 6px; }
+.pv-side-item { display: block; width: 100%; text-align: left; background: none; border: none; border-radius: 6px; padding: 6px 8px; font-size: 0.78rem; cursor: pointer; color: var(--ink); }
+.pv-side-item:hover { background: var(--paper-edge); }
+.pv-main { flex: 1; min-width: 0; max-height: 78vh; overflow-y: auto; outline: none; --pv-colw: 720px; scroll-behavior: smooth; }
+.pv-chapter { margin-bottom: 18px; }
+.pv-chapter-head { max-width: var(--pv-colw); margin: 0 auto 10px; padding: 8px 12px; background: var(--teal); color: #fff; border-radius: var(--radius); display: flex; gap: 10px; align-items: baseline; }
+.pv-chapter-no { font-family: var(--display); font-weight: 700; }
+.pv-chapter-title { font-size: 0.86rem; opacity: 0.95; }
+.pv-panel { max-width: var(--pv-colw); margin: 0 auto 14px; border: 1.5px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--paper); }
+.pv-img-wrap { display: block; background: var(--paper-edge); text-align: center; }
+.pv-img { display: block; margin: 0 auto; }
+.pv-imgsize-auto .pv-img { max-width: 100%; height: auto; }
+.pv-imgsize-fit .pv-img { width: 100%; height: auto; }
+.pv-imgsize-original .pv-img { max-width: none; height: auto; }
+.pv-noimg { padding: 48px 12px; color: var(--muted); font-family: var(--display); font-weight: 700; letter-spacing: 0.08em; }
+.pv-metas { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px; border-bottom: 1px dashed var(--line); }
+.pv-meta { font-size: 0.72rem; background: var(--paper-edge); border: 1px solid var(--line); border-radius: 10px; padding: 1px 8px; color: var(--muted); }
+.pv-caption { padding: 8px 10px; font-size: 0.86rem; display: flex; gap: 8px; align-items: baseline; }
+.pv-dialogue, .pv-narration { padding: 6px 10px; display: flex; flex-direction: column; gap: 6px; }
+.pv-narration { background: var(--paper-edge); font-style: italic; }
+.pv-line { display: flex; gap: 8px; align-items: baseline; }
+.pv-speaker { font-weight: 700; color: var(--teal); white-space: nowrap; font-size: 0.82rem; }
+.pv-line-text { font-size: 0.86rem; }
+.pv-ar { font-size: 1rem; direction: rtl; text-align: right; }
+.pv-tag { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); border: 1px solid var(--line); border-radius: 8px; padding: 0 6px; white-space: nowrap; }
+.pv-prompt { display: none; padding: 8px 10px; border-top: 1px dashed var(--line); background: rgba(47,143,134,0.04); }
+.pv-show-prompt .pv-prompt { display: block; }
+.pv-prompt-text { font-family: var(--mono, monospace); font-size: 0.74rem; margin-top: 4px; }
+.pv-prompt-neg { font-family: var(--mono, monospace); font-size: 0.7rem; color: var(--muted); margin-top: 4px; }
+/* Opsyen sembunyi */
+.pv-hide-image .pv-img-wrap { display: none; }
+.pv-hide-caption .pv-caption { display: none; }
+.pv-hide-dialogue .pv-dialogue { display: none; }
+.pv-hide-narration .pv-narration { display: none; }
+/* Compact */
+.pv-compact .pv-panel { margin-bottom: 8px; }
+.pv-compact .pv-metas, .pv-compact .pv-caption, .pv-compact .pv-dialogue, .pv-compact .pv-narration, .pv-compact .pv-prompt { padding-top: 4px; padding-bottom: 4px; }
+.pv-compact .pv-noimg { padding: 20px 12px; }
+/* Dark mode */
+.pv-dark .pv-main { background: #15171a; }
+.pv-dark .pv-panel { background: #1c1f24; border-color: #2c3036; color: #e6e6e6; }
+.pv-dark .pv-img-wrap { background: #111316; }
+.pv-dark .pv-noimg { color: #7a8088; }
+.pv-dark .pv-metas { border-bottom-color: #2c3036; }
+.pv-dark .pv-meta { background: #23272d; border-color: #2c3036; color: #aeb4bd; }
+.pv-dark .pv-narration { background: #1f2329; }
+.pv-dark .pv-line-text, .pv-dark .pv-caption { color: #e6e6e6; }
+.pv-dark .pv-prompt { background: rgba(47,143,134,0.10); border-top-color: #2c3036; }
+
 /* --- Fokus papan kekunci --- */
 :focus-visible {
   outline: 2px solid var(--gold);

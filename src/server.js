@@ -24,6 +24,7 @@ const aiRouter = require('./routes/ai');
 const promptContextRouter = require('./routes/promptContext');
 const imageRouter = require('./routes/image');
 const pipelineRouter = require('./routes/pipeline');
+const previewRouter = require('./routes/preview');
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -95,6 +96,9 @@ app.use('/api', imageRouter);
 
 // Fasa 14 — Auto Production Pipeline. /projects/:id/production/{start,status,cancel}.
 app.use('/api', pipelineRouter);
+
+// Fasa 15 — Webtoon Preview Engine (read-only). /projects/:id/preview.
+app.use('/api', previewRouter);
 
 // Apa-apa laluan /api/* yang tidak dikenali → 404 JSON yang kemas.
 app.use('/api', (req, res) => {

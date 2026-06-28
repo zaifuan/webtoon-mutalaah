@@ -292,6 +292,9 @@ const api = {
   },
   cancelProduction(projectId) {
     return this.req('POST', '/api/projects/' + projectId + '/production/cancel');
+  },
+  getPreview(projectId) {
+    return this.req('GET', '/api/projects/' + projectId + '/preview');
   }
 };
 
@@ -733,6 +736,7 @@ async function renderDetail(id) {
   const tabReview = el('button', { class: 'tab', type: 'button', text: 'Review' });
   const tabImage = el('button', { class: 'tab', type: 'button', text: 'Image' });
   const tabProduction = el('button', { class: 'tab', type: 'button', text: 'Production' });
+  const tabPreview = el('button', { class: 'tab', type: 'button', text: 'Preview' });
   const content = el('div', { class: 'tab-content' });
 
   function setTab(name) {
@@ -747,6 +751,7 @@ async function renderDetail(id) {
     tabReview.className = 'tab';
     tabImage.className = 'tab';
     tabProduction.className = 'tab';
+    tabPreview.className = 'tab';
     if (name === 'watak') {
       tabWatak.className = 'tab is-active';
       renderCharacterTab(id, content, updateStatus);
@@ -774,6 +779,9 @@ async function renderDetail(id) {
     } else if (name === 'production') {
       tabProduction.className = 'tab is-active';
       renderProductionTab(id, content, updateStatus);
+    } else if (name === 'preview') {
+      tabPreview.className = 'tab is-active';
+      renderPreviewTab(id, content, updateStatus);
     } else {
       tabTeks.className = 'tab is-active';
       renderTextTab(id, content, updateStatus);
@@ -791,8 +799,9 @@ async function renderDetail(id) {
   tabReview.addEventListener('click', function () { setTab('review'); });
   tabImage.addEventListener('click', function () { setTab('image'); });
   tabProduction.addEventListener('click', function () { setTab('production'); });
+  tabPreview.addEventListener('click', function () { setTab('preview'); });
 
-  view.appendChild(el('div', { class: 'tabs' }, [tabTeks, tabWatak, tabBabak, tabPanel, tabScript, tabVisual, tabPrompt, tabReview, tabImage, tabProduction]));
+  view.appendChild(el('div', { class: 'tabs' }, [tabTeks, tabWatak, tabBabak, tabPanel, tabScript, tabVisual, tabPrompt, tabReview, tabImage, tabProduction, tabPreview]));
   view.appendChild(content);
   setTab('teks');
 }
@@ -3324,6 +3333,238 @@ async function renderProductionTab(id, container, updateStatus) {
       reload();
     }, 3000);
   }
+}
+
+// ---- Tab: Preview (Webtoon Reader read-only — Fasa 15) -------------------
+let previewOpts = { image: true, caption: true, dialogue: true, narration: true, prompt: false, dark: false, compact: false };
+let previewZoom = 100;
+let previewImgSize = 'auto'; // auto | fit | original
+let previewFilterChapter = '';
+let previewFilterChar = '';
+let previewSearch = '';
+
+async function renderPreviewTab(id, container, updateStatus) {
+  container.innerHTML = '';
+  container.appendChild(el('p', { class: 'muted', text: 'Memuatkan preview…' }));
+
+  let data;
+  try { data = await api.getPreview(id); }
+  catch (err) {
+    container.innerHTML = '';
+    container.appendChild(el('p', { class: 'error-text', text: 'Gagal memuatkan preview: ' + err.message }));
+    return;
+  }
+  container.innerHTML = '';
+
+  const chapters = (data && data.chapters) || [];
+  const characters = (data && data.characters) || [];
+  const summary = (data && data.summary) || { chapters: 0, panels: 0, with_image: 0, without_image: 0 };
+
+  // ---- Toolbar ----
+  function optCheckbox(key, label) {
+    const cb = el('input', { type: 'checkbox' });
+    cb.checked = !!previewOpts[key];
+    cb.addEventListener('change', function () { previewOpts[key] = cb.checked; applyOptions(); });
+    return el('label', { class: 'pv-opt' }, [cb, el('span', { text: label })]);
+  }
+  const zoomSel = el('select', { class: 'pr-select' }, ['50', '75', '100', '125'].map(function (z) { return el('option', { value: z, text: z + '%' }); }));
+  zoomSel.value = String(previewZoom);
+  zoomSel.addEventListener('change', function () { previewZoom = parseInt(zoomSel.value, 10) || 100; applyOptions(); });
+
+  const sizeSel = el('select', { class: 'pr-select' }, [['auto', 'Auto'], ['fit', 'Fit Width'], ['original', 'Original']].map(function (o) { return el('option', { value: o[0], text: o[1] }); }));
+  sizeSel.value = previewImgSize;
+  sizeSel.addEventListener('change', function () { previewImgSize = sizeSel.value; applyOptions(); });
+
+  const chapSel = el('select', { class: 'pr-select' }, [el('option', { value: '', text: 'Semua bab' })].concat(chapters.map(function (c) {
+    const n = c.scene.scene_no != null ? c.scene.scene_no : '?';
+    return el('option', { value: String(c.scene.id), text: 'Bab ' + n + (c.scene.title_ms ? ' — ' + c.scene.title_ms : '') });
+  })));
+  chapSel.value = previewFilterChapter;
+  chapSel.addEventListener('change', function () { previewFilterChapter = chapSel.value; applyFilters(); });
+
+  const charSel = el('select', { class: 'pr-select' }, [el('option', { value: '', text: 'Semua watak' })].concat(characters.filter(function (c) { return c.name_ms; }).map(function (c) {
+    return el('option', { value: c.name_ms.toLowerCase(), text: c.name_ms });
+  })));
+  charSel.value = previewFilterChar;
+  charSel.addEventListener('change', function () { previewFilterChar = charSel.value; applyFilters(); });
+
+  const searchInput = el('input', { class: 'field-input pv-search', type: 'search', placeholder: 'Cari dialog / caption…' });
+  searchInput.value = previewSearch;
+  searchInput.addEventListener('input', function () { previewSearch = searchInput.value; applyFilters(); });
+
+  const toolbar = el('div', { class: 'pv-toolbar' }, [
+    el('div', { class: 'pv-toolbar-row' }, [
+      optCheckbox('image', 'Image'), optCheckbox('caption', 'Caption'), optCheckbox('dialogue', 'Dialog'),
+      optCheckbox('narration', 'Narasi'), optCheckbox('prompt', 'Prompt'), optCheckbox('dark', 'Dark'), optCheckbox('compact', 'Compact')
+    ]),
+    el('div', { class: 'pv-toolbar-row' }, [
+      el('label', { class: 'pv-ctrl' }, [el('span', { text: 'Zoom' }), zoomSel]),
+      el('label', { class: 'pv-ctrl' }, [el('span', { text: 'Imej' }), sizeSel]),
+      el('label', { class: 'pv-ctrl' }, [el('span', { text: 'Bab' }), chapSel]),
+      el('label', { class: 'pv-ctrl' }, [el('span', { text: 'Watak' }), charSel]),
+      searchInput,
+      el('span', { class: 'pr-muted', text: summary.chapters + ' bab · ' + summary.panels + ' panel · ' + summary.with_image + ' berimej' })
+    ])
+  ]);
+  container.appendChild(toolbar);
+
+  if (!chapters.length || summary.panels === 0) {
+    container.appendChild(el('div', { class: 'pv-empty' }, [
+      el('p', { class: 'muted', text: 'Tiada panel untuk dipratonton.' }),
+      el('p', { class: 'pr-muted', text: 'Jana Babak → Panel (dan Pipeline) dahulu, kemudian buka Preview semula.' })
+    ]));
+    return;
+  }
+
+  // ---- Sidebar + Reader ----
+  const sideItems = chapters.map(function (c) {
+    const n = c.scene.scene_no != null ? c.scene.scene_no : '?';
+    const btn = el('button', { class: 'pv-side-item', type: 'button', text: 'Bab ' + n + (c.scene.title_ms ? ' — ' + c.scene.title_ms : '') + ' (' + c.panels.length + ')' });
+    btn.addEventListener('click', function () {
+      const target = document.getElementById('pv-ch-' + c.scene.id);
+      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    return btn;
+  });
+  const sidebar = el('div', { class: 'pv-sidebar' }, [el('div', { class: 'pv-side-title', text: 'Bab' })].concat(sideItems));
+
+  const main = el('div', { class: 'pv-main', tabindex: '0' });
+
+  function metaPill(label, val) { return el('span', { class: 'pv-meta', text: label + ': ' + val }); }
+
+  chapters.forEach(function (c) {
+    const n = c.scene.scene_no != null ? c.scene.scene_no : '?';
+    const chWrap = el('div', { class: 'pv-chapter' });
+    chWrap.id = 'pv-ch-' + c.scene.id;
+    chWrap.setAttribute('data-chapter', String(c.scene.id));
+    chWrap.appendChild(el('div', { class: 'pv-chapter-head' }, [
+      el('span', { class: 'pv-chapter-no', text: 'Bab ' + n }),
+      el('span', { class: 'pv-chapter-title', text: c.scene.title_ms || '' })
+    ]));
+
+    c.panels.forEach(function (p) {
+      const card = el('div', { class: 'pv-panel' });
+      const charNames = (p.characters || []).join(', ');
+      const textBlob = ((p.caption_ms || '') + ' ' +
+        (p.dialogue || []).map(function (d) { return (d.speaker_name || '') + ' ' + (d.text_ms || '') + ' ' + (d.text_ar || ''); }).join(' ') + ' ' +
+        (p.narration || []).map(function (nn) { return (nn.text_ms || '') + ' ' + (nn.text_ar || ''); }).join(' ')).toLowerCase();
+      card.setAttribute('data-chapter', String(c.scene.id));
+      card.setAttribute('data-chars', charNames.toLowerCase());
+      card.setAttribute('data-text', textBlob);
+
+      // Image
+      const imgWrap = el('div', { class: 'pv-img-wrap' });
+      if (p.image && p.image.url) {
+        imgWrap.appendChild(el('img', { class: 'pv-img', src: p.image.url, alt: 'Panel ' + p.panel_no, loading: 'lazy' }));
+      } else {
+        imgWrap.appendChild(el('div', { class: 'pv-noimg', text: 'No Image' }));
+      }
+      card.appendChild(imgWrap);
+
+      // Meta
+      const metas = [metaPill('Bab', n), metaPill('Panel', p.panel_no)];
+      if (p.shot) metas.push(metaPill('Shot', p.shot));
+      if (p.mood) metas.push(metaPill('Mood', p.mood));
+      if (charNames) metas.push(metaPill('Watak', charNames));
+      card.appendChild(el('div', { class: 'pv-metas' }, metas));
+
+      // Caption
+      if (p.caption_ms) card.appendChild(el('div', { class: 'pv-caption' }, [el('span', { class: 'pv-tag', text: 'Caption' }), el('span', { text: p.caption_ms })]));
+
+      // Dialogue
+      if (p.dialogue && p.dialogue.length) {
+        const dWrap = el('div', { class: 'pv-dialogue' });
+        p.dialogue.forEach(function (d) {
+          dWrap.appendChild(el('div', { class: 'pv-line' }, [
+            el('span', { class: 'pv-speaker', text: (d.speaker_name || '???') + ':' }),
+            el('span', { class: 'pv-line-text' }, [
+              d.text_ms ? el('div', { text: d.text_ms }) : null,
+              d.text_ar ? el('div', { class: 'pv-ar', text: d.text_ar }) : null
+            ])
+          ]));
+        });
+        card.appendChild(dWrap);
+      }
+
+      // Narration
+      if (p.narration && p.narration.length) {
+        const nWrap = el('div', { class: 'pv-narration' });
+        p.narration.forEach(function (nn) {
+          nWrap.appendChild(el('div', { class: 'pv-line' }, [
+            el('span', { class: 'pv-tag', text: 'Narasi' }),
+            el('span', { class: 'pv-line-text' }, [
+              nn.text_ms ? el('div', { text: nn.text_ms }) : null,
+              nn.text_ar ? el('div', { class: 'pv-ar', text: nn.text_ar }) : null
+            ])
+          ]));
+        });
+        card.appendChild(nWrap);
+      }
+
+      // Prompt (tersembunyi secara lalai)
+      if (p.prompt && (p.prompt.prompt_text || p.prompt.negative_prompt)) {
+        card.appendChild(el('div', { class: 'pv-prompt' }, [
+          el('span', { class: 'pv-tag', text: 'Prompt' }),
+          el('div', { class: 'pv-prompt-text', text: p.prompt.prompt_text || '' }),
+          p.prompt.negative_prompt ? el('div', { class: 'pv-prompt-neg', text: 'Negatif: ' + p.prompt.negative_prompt }) : null
+        ]));
+      }
+
+      chWrap.appendChild(card);
+    });
+
+    main.appendChild(chWrap);
+  });
+
+  const readerRoot = el('div', { class: 'pv-reader' }, [sidebar, main]);
+  container.appendChild(readerRoot);
+
+  // ---- Terapkan opsyen (kelas + zoom + saiz imej) ----
+  function applyOptions() {
+    readerRoot.classList.toggle('pv-hide-image', !previewOpts.image);
+    readerRoot.classList.toggle('pv-hide-caption', !previewOpts.caption);
+    readerRoot.classList.toggle('pv-hide-dialogue', !previewOpts.dialogue);
+    readerRoot.classList.toggle('pv-hide-narration', !previewOpts.narration);
+    readerRoot.classList.toggle('pv-show-prompt', !!previewOpts.prompt);
+    readerRoot.classList.toggle('pv-dark', !!previewOpts.dark);
+    readerRoot.classList.toggle('pv-compact', !!previewOpts.compact);
+    readerRoot.classList.remove('pv-imgsize-auto', 'pv-imgsize-fit', 'pv-imgsize-original');
+    readerRoot.classList.add('pv-imgsize-' + previewImgSize);
+    const base = 720;
+    main.style.setProperty('--pv-colw', Math.round(base * (previewZoom / 100)) + 'px');
+  }
+
+  // ---- Terapkan filter / carian (tanpa muat semula) ----
+  function applyFilters() {
+    const q = (previewSearch || '').trim().toLowerCase();
+    const ch = previewFilterChapter;
+    const chr = (previewFilterChar || '').trim().toLowerCase();
+    const chapterEls = main.querySelectorAll('.pv-chapter');
+    chapterEls.forEach(function (chEl) {
+      let visible = 0;
+      const chapterMatch = !ch || chEl.getAttribute('data-chapter') === ch;
+      chEl.querySelectorAll('.pv-panel').forEach(function (pEl) {
+        let show = chapterMatch;
+        if (show && chr) show = (pEl.getAttribute('data-chars') || '').indexOf(chr) !== -1;
+        if (show && q) show = (pEl.getAttribute('data-text') || '').indexOf(q) !== -1;
+        pEl.style.display = show ? '' : 'none';
+        if (show) visible++;
+      });
+      chEl.style.display = (chapterMatch && (visible > 0 || (!q && !chr))) ? '' : 'none';
+    });
+  }
+
+  applyOptions();
+  applyFilters();
+
+  // ---- Keyboard (Arrow Up/Down, Home, End) ----
+  main.addEventListener('keydown', function (ev) {
+    const step = Math.round(main.clientHeight * 0.9);
+    if (ev.key === 'ArrowDown') { main.scrollBy({ top: step, behavior: 'smooth' }); ev.preventDefault(); }
+    else if (ev.key === 'ArrowUp') { main.scrollBy({ top: -step, behavior: 'smooth' }); ev.preventDefault(); }
+    else if (ev.key === 'Home') { main.scrollTo({ top: 0, behavior: 'smooth' }); ev.preventDefault(); }
+    else if (ev.key === 'End') { main.scrollTo({ top: main.scrollHeight, behavior: 'smooth' }); ev.preventDefault(); }
+  });
 }
 
 // ---- Router ---------------------------------------------------------------
