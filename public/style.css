@@ -1551,6 +1551,17 @@ select.field-input {
 .pr-pb { border: 1.5px solid var(--ink); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 12px; background: var(--paper); display: flex; flex-direction: column; gap: 6px; }
 .pr-pb .pb-out { font-family: var(--mono, monospace); font-size: 0.74rem; }
 .pr-img-preview { max-width: 256px; max-height: 256px; border: 1.5px solid var(--line); border-radius: var(--radius); margin-top: 6px; image-rendering: auto; }
+/* --- Fasa 14: Auto Pipeline --- */
+.pl-card { border-width: 2px; }
+.pl-actions { gap: 8px; flex-wrap: wrap; }
+.pl-summary { gap: 10px; flex-wrap: wrap; }
+.pl-stage { display: flex; align-items: center; gap: 8px; }
+.pl-stage-lbl { font-family: var(--display); font-weight: 700; font-size: 0.78rem; width: 60px; flex: 0 0 60px; }
+.pl-stage-num { font-size: 0.74rem; color: var(--muted); white-space: nowrap; }
+.pl-bar { flex: 1; height: 12px; background: var(--paper-edge); border: 1.5px solid var(--line); border-radius: 6px; overflow: hidden; }
+.pl-fill { height: 100%; background: var(--teal); transition: width 0.4s ease; }
+.pl-fill--fail { background: #b03a3a; }
+.pl-live { display: flex; align-items: center; gap: 8px; padding-left: 4px; }
 
 /* --- Fokus papan kekunci --- */
 :focus-visible {

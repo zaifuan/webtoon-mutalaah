@@ -23,6 +23,7 @@ const productionEngine = require('./services/productionEngine');
 const aiRouter = require('./routes/ai');
 const promptContextRouter = require('./routes/promptContext');
 const imageRouter = require('./routes/image');
+const pipelineRouter = require('./routes/pipeline');
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -91,6 +92,9 @@ app.use('/api', promptContextRouter);
 
 // Fasa 12 — Image Generator abstraction. /image/providers, /image/default, health.
 app.use('/api', imageRouter);
+
+// Fasa 14 — Auto Production Pipeline. /projects/:id/production/{start,status,cancel}.
+app.use('/api', pipelineRouter);
 
 // Apa-apa laluan /api/* yang tidak dikenali → 404 JSON yang kemas.
 app.use('/api', (req, res) => {

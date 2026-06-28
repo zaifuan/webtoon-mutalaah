@@ -283,6 +283,15 @@ const api = {
   },
   testGenerateImage(prompt) {
     return this.req('POST', '/api/image/test-generate', { prompt: prompt });
+  },
+  startProduction(projectId) {
+    return this.req('POST', '/api/projects/' + projectId + '/production/start');
+  },
+  getProductionStatus(projectId) {
+    return this.req('GET', '/api/projects/' + projectId + '/production/status');
+  },
+  cancelProduction(projectId) {
+    return this.req('POST', '/api/projects/' + projectId + '/production/cancel');
   }
 };
 
@@ -2950,6 +2959,8 @@ async function renderProductionTab(id, container, updateStatus) {
     container.appendChild(el('p', { class: 'error-text', text: 'Gagal memuatkan: ' + err.message }));
     return;
   }
+  let pstat = null;
+  try { pstat = await api.getProductionStatus(id); } catch (e) { pstat = null; }
   container.innerHTML = '';
 
   const jobs = (data && data.jobs) || [];
@@ -2986,6 +2997,83 @@ async function renderProductionTab(id, container, updateStatus) {
   ]));
 
   if (productionFormOpen) container.appendChild(buildCreateJobForm(id, reload));
+
+  // Auto Pipeline (Fasa 14) — 🚀 Generate Project membina queue automatik.
+  (function renderPipeline() {
+    const ps = (pstat && pstat.ok) ? pstat : null;
+    const pst = ps ? ps.pipeline_status : 'idle';
+    const sm = (ps && ps.summary) || {};
+    const stg = (ps && ps.stages) || {};
+    function fmtEta(s) { if (s == null) return '—'; if (s <= 0) return '0s'; const m = Math.floor(s / 60), ss = s % 60; return m > 0 ? (m + 'm ' + ss + 's') : (ss + 's'); }
+    function badgeClass(s) { return s === 'completed' ? 'pr-health--online' : (s === 'failed' ? 'pr-health--offline' : (s === 'running' ? 'pr-ai-cur' : 'pr-health--unknown')); }
+    function stageRow(label, s) {
+      s = s || { total: 0, completed: 0, running: 0, failed: 0 };
+      const pct = s.total > 0 ? Math.round((s.completed / s.total) * 100) : 0;
+      const fill = el('div', { class: 'pl-fill' + (s.failed > 0 ? ' pl-fill--fail' : ''), style: 'width:' + pct + '%' });
+      return el('div', { class: 'pl-stage' }, [
+        el('span', { class: 'pl-stage-lbl', text: label }),
+        el('div', { class: 'pl-bar' }, [fill]),
+        el('span', { class: 'pl-stage-num', text: s.completed + ' / ' + s.total + (s.failed > 0 ? ' · gagal ' + s.failed : '') + (s.running > 0 ? ' · ' + s.running + ' aktif' : '') })
+      ]);
+    }
+    const genBtn = el('button', { class: 'btn btn-primary', type: 'button', text: '🚀 Generate Project' });
+    genBtn.addEventListener('click', async function () {
+      genBtn.disabled = true; const l = genBtn.textContent; genBtn.textContent = 'Menyusun…';
+      try {
+        const out = await api.startProduction(id);
+        if (out.already_running) toast('Pipeline sedang berjalan — tiada duplikat ditambah', 'ok');
+        else toast('Pipeline dibina: ' + (out.created || 0) + ' job (' + (out.panels || 0) + ' panel)', 'ok');
+        reload();
+      } catch (e) { toast('Gagal: ' + e.message, 'error'); genBtn.disabled = false; genBtn.textContent = l; }
+    });
+    const cancelBtn = el('button', { class: 'btn btn-ghost', type: 'button', text: 'Cancel' });
+    cancelBtn.addEventListener('click', async function () {
+      cancelBtn.disabled = true;
+      try { const out = await api.cancelProduction(id); toast('Dibatalkan: ' + (out.cancelled || 0) + ' job', 'ok'); reload(); }
+      catch (e) { toast('Gagal: ' + e.message, 'error'); cancelBtn.disabled = false; }
+    });
+    const refreshBtn = el('button', { class: 'btn btn-ghost', type: 'button', text: 'Refresh' });
+    refreshBtn.addEventListener('click', function () { reload(); });
+
+    const rows = [
+      el('div', { class: 'pr-ai-row' }, [
+        el('span', { class: 'pr-ai-label', text: 'Auto Pipeline' }),
+        el('span', { class: 'pr-pill ' + badgeClass(pst), text: pst }),
+        el('span', { class: 'pr-muted', text: 'Projek: ' + (ps ? ps.project_status : '—') })
+      ]),
+      el('div', { class: 'pr-ai-row pl-actions' }, [genBtn, cancelBtn, refreshBtn])
+    ];
+    if (ps && sm.total_jobs > 0) {
+      rows.push(el('div', { class: 'pr-ai-row pl-summary' }, [
+        el('span', { class: 'pr-muted', text: 'Panel: ' + ps.panels }),
+        el('span', { class: 'pr-muted', text: 'Job: ' + sm.total_jobs }),
+        el('span', { class: 'pr-muted', text: 'Selesai: ' + sm.completed }),
+        el('span', { class: 'pr-muted', text: 'Berjalan: ' + sm.running }),
+        el('span', { class: 'pr-muted', text: 'Gagal: ' + sm.failed }),
+        el('span', { class: 'pr-muted', text: 'Baki: ' + sm.remaining }),
+        el('span', { class: 'pr-muted', text: 'ETA: ' + fmtEta(sm.eta_seconds) })
+      ]));
+      rows.push(stageRow('Script', stg.script));
+      rows.push(stageRow('Visual', stg.visual));
+      rows.push(stageRow('Prompt', stg.prompt));
+      rows.push(stageRow('Image', stg.image));
+      rows.push(stageRow('Review', stg.review));
+      const live = (ps.live_activity) || [];
+      if (live.length) {
+        rows.push(el('div', { class: 'pr-ai-row' }, [el('span', { class: 'pr-ctrl-lbl', text: 'Live Activity' })]));
+        live.forEach(function (a) {
+          rows.push(el('div', { class: 'pl-live' }, [
+            el('span', { class: 'pr-pill pr-wk--online', text: a.worker }),
+            el('span', { class: 'pr-muted', text: '↓ ' + a.stage + (a.panel_id != null ? ' · Panel ' + a.panel_id : '') })
+          ]));
+        });
+      }
+      if (ps.review_failed) rows.push(el('p', { class: 'error-text', text: 'Review GAGAL — pipeline berhenti. Imej TIDAK dipadam.' }));
+    } else {
+      rows.push(el('p', { class: 'pr-muted', text: 'Tekan 🚀 Generate Project untuk membina queue automatik (Script → Visual → Prompt → Image → Review) bagi semua panel projek ini.' }));
+    }
+    container.appendChild(el('div', { class: 'pr-ai pl-card' }, rows));
+  })();
 
   // AI Provider (Fasa 10/11) — Production Engine hanya tahu adapter, bukan model.
   const provSel = el('select', { class: 'pr-select' }, aiProviders.map(function (p) {
@@ -3228,8 +3316,9 @@ async function renderProductionTab(id, container, updateStatus) {
     container.appendChild(el('p', { class: 'pr-muted', text: 'Tiada sejarah lagi.' }));
   }
 
-  // Auto-refresh (jika dihidupkan) — berhenti automatik bila keluar tab.
-  if (productionAuto) {
+  // Auto-refresh (jika dihidupkan ATAU pipeline sedang berjalan) — berhenti automatik bila keluar tab/siap.
+  const pipelineRunning = !!(pstat && pstat.ok && pstat.pipeline_status === 'running');
+  if (productionAuto || pipelineRunning) {
     productionPollTimer = setInterval(function () {
       if (!isProductionActive()) { clearProductionPolling(); return; }
       reload();
