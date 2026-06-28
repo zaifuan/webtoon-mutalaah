@@ -11,6 +11,7 @@
 
 const pool = require('../db/pool');
 const aiAdapter = require('../ai/adapter');
+const imageAdapter = require('../image/adapter');
 
 const JOB_TYPES = [
   'TEXT_PARSE', 'CHARACTER_GENERATION', 'SCENE_GENERATION', 'PANEL_GENERATION',
@@ -152,13 +153,16 @@ async function dummyTick() {
       await startJob(job.id, DUMMY_NAME);
       // Fasa 10: worker TIDAK lagi sleep() sendiri — ia memanggil AI Adapter.
       // Dummy adapter masih sleep(1000) → behaviour sistem kekal sama.
-      // Fasa 10/11: worker memanggil AI Adapter. Adapter TIDAK pernah crash —
-      // ia pulang { success:false } jika gagal (cth. Ollama tiada/timeout).
+      // Fasa 10/11/12: worker memanggil adapter. job_type IMAGE_GENERATION
+      // dirutekan ke Image Adapter; semua job lain kekal ke AI Adapter.
+      // Adapter TIDAK pernah crash — ia pulang { success:false } jika gagal.
       let aiResult;
       try {
-        aiResult = await aiAdapter.runJob(job.job_type, job.payload_json);
+        aiResult = (job.job_type === 'IMAGE_GENERATION')
+          ? await imageAdapter.runJob(job.job_type, job.payload_json)
+          : await aiAdapter.runJob(job.job_type, job.payload_json);
       } catch (e) {
-        aiResult = { success: false, error: 'AI adapter ralat: ' + (e && e.message ? e.message : String(e)) };
+        aiResult = { success: false, error: 'Adapter ralat: ' + (e && e.message ? e.message : String(e)) };
       }
       if (aiResult && aiResult.success === false) {
         // Production Engine yang tentukan status: gagal terkawal (retry/failed Fasa 9).
@@ -166,7 +170,7 @@ async function dummyTick() {
         await failJob(job.id, msg);
       } else {
         await completeJob(job.id, Object.assign({
-          simulated: !!(aiResult && aiResult.provider === 'dummy'),
+          simulated: !!(aiResult && (aiResult.provider === 'dummy' || aiResult.provider === 'dummy-image')),
           finished_at: new Date().toISOString()
         }, aiResult));
       }

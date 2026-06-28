@@ -268,6 +268,18 @@ const api = {
   },
   previewPromptContext(task, payload) {
     return this.req('POST', '/api/prompts/context', { task: task, payload: payload || {} });
+  },
+  getImageProviders() {
+    return this.req('GET', '/api/image/providers');
+  },
+  getImageDefault() {
+    return this.req('GET', '/api/image/default');
+  },
+  setImageDefault(provider) {
+    return this.req('POST', '/api/image/default', { provider: provider });
+  },
+  getImageProviderHealth(provider) {
+    return this.req('GET', '/api/image/providers/' + encodeURIComponent(provider) + '/health');
   }
 };
 
@@ -2923,12 +2935,13 @@ async function renderProductionTab(id, container, updateStatus) {
 
   function reload() { renderProductionTab(id, container, updateStatus); }
 
-  let data, wdata, ai, tpls;
+  let data, wdata, ai, tpls, img;
   try {
     data = await api.listJobs(productionFilter);
     wdata = await api.listWorkers();
     ai = await api.getAiProviders();
     tpls = await api.getPromptTemplates();
+    img = await api.getImageProviders();
   } catch (err) {
     container.innerHTML = '';
     container.appendChild(el('p', { class: 'error-text', text: 'Gagal memuatkan: ' + err.message }));
@@ -3022,6 +3035,52 @@ async function renderProductionTab(id, container, updateStatus) {
     el('p', { class: 'pr-muted', text: aiDefault === 'dummy'
       ? 'Provider dummy: respons simulasi (success:true, cost:0). Engine tidak tahu model AI yang digunakan.'
       : 'Provider ollama (pilihan, tempatan). Jika Ollama tidak berjalan, job gagal secara terkawal — sistem tidak crash. Default sistem kekal dummy.' })
+  ]));
+
+  // Image Provider (Fasa 12) — Production Engine hanya tahu adapter, bukan engine.
+  const imgProviders = (img && img.providers) || [];
+  const imgDefault = (img && img.default) || 'dummy-image';
+  const imgDefInfo = (imgProviders.find(function (p) { return p.name === imgDefault; }) || {}).info || { name: imgDefault, model: 'dummy-image-model', latency_ms: 1000 };
+  const imgProvSel = el('select', { class: 'pr-select' }, imgProviders.map(function (p) {
+    return el('option', { value: p.name, text: p.name + (p.info && p.info.model ? ' (' + p.info.model + ')' : '') });
+  }));
+  imgProvSel.value = imgDefault;
+  imgProvSel.addEventListener('change', async function () {
+    try { await api.setImageDefault(imgProvSel.value); toast('Image provider ditukar: ' + imgProvSel.value, 'ok'); reload(); }
+    catch (e) { toast('Gagal: ' + e.message, 'error'); }
+  });
+  const imgStatusBadge = el('span', { class: 'pr-pill pr-health--unknown', text: 'Belum diuji' });
+  const imgStatusDetail = el('span', { class: 'pr-muted', text: '' });
+  const imgTestBtn = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', text: 'Test Connection' });
+  imgTestBtn.addEventListener('click', async function () {
+    imgTestBtn.disabled = true; const lbl = imgTestBtn.textContent; imgTestBtn.textContent = 'Menguji…';
+    imgStatusBadge.className = 'pr-pill pr-health--unknown'; imgStatusBadge.textContent = 'Menguji…'; imgStatusDetail.textContent = '';
+    try {
+      const h = await api.getImageProviderHealth(imgDefault);
+      if (h && h.ok && h.available) {
+        imgStatusBadge.className = 'pr-pill pr-health--online'; imgStatusBadge.textContent = 'Online';
+        imgStatusDetail.textContent = (h.latency_ms != null ? 'latency: ' + h.latency_ms + 'ms' : '') + (h.model ? ' · ' + h.model : '');
+      } else {
+        imgStatusBadge.className = 'pr-pill pr-health--offline'; imgStatusBadge.textContent = 'Offline';
+        imgStatusDetail.textContent = (h && h.error ? h.error : 'tidak tersedia');
+      }
+    } catch (e) {
+      imgStatusBadge.className = 'pr-pill pr-health--offline'; imgStatusBadge.textContent = 'Offline';
+      imgStatusDetail.textContent = e.message;
+    }
+    imgTestBtn.disabled = false; imgTestBtn.textContent = lbl;
+  });
+  container.appendChild(el('div', { class: 'pr-ai' }, [
+    el('div', { class: 'pr-ai-row' }, [
+      el('span', { class: 'pr-ai-label', text: 'Image Provider' }),
+      el('span', { class: 'pr-pill pr-ai-cur', text: imgDefault }),
+      el('span', { class: 'pr-muted', text: 'Model: ' + (imgDefInfo.model || '—') + ' · latency: ' + (imgDefInfo.latency_ms != null ? imgDefInfo.latency_ms + 'ms' : '—') })
+    ]),
+    el('div', { class: 'pr-ai-row' }, [
+      el('span', { class: 'pr-ctrl-lbl', text: 'Status' }), imgStatusBadge, imgTestBtn, imgStatusDetail
+    ]),
+    el('label', { class: 'pr-ctrl' }, [el('span', { class: 'pr-ctrl-lbl', text: 'Tukar provider' }), imgProvSel]),
+    el('p', { class: 'pr-muted', text: 'Penjana imej (abstraction, simulasi). Respons dummy (image:null, cost:0). Job IMAGE_GENERATION dirutekan ke Image Adapter; job lain ke AI Adapter.' })
   ]));
 
   // Prompt Builder (Fasa 11B) — single source of truth untuk semua prompt.
