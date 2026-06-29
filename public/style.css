@@ -1622,6 +1622,32 @@ select.field-input {
 .pv-dark .pv-line-text, .pv-dark .pv-caption { color: #e6e6e6; }
 .pv-dark .pv-prompt { background: rgba(47,143,134,0.10); border-top-color: #2c3036; }
 
+/* --- Fasa 16: Export Studio --- */
+.ex-card { border: 1.5px solid var(--line); border-radius: var(--radius); padding: 14px; margin-bottom: 14px; background: var(--paper); }
+.ex-card-title { font-family: var(--display); font-weight: 700; font-size: 0.95rem; color: var(--teal); margin-bottom: 10px; }
+.ex-card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.ex-card-head .ex-card-title { margin-bottom: 0; }
+.ex-opts { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 8px; }
+.ex-quality { width: 80px; }
+.ex-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.ex-type { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; display: flex; flex-direction: column; gap: 8px; background: var(--paper-edge); }
+.ex-type-head { font-family: var(--display); font-weight: 700; font-size: 0.86rem; }
+.ex-type-desc { font-size: 0.74rem; color: var(--muted); flex: 1; }
+.ex-btn { width: 100%; }
+.ex-status { min-height: 18px; font-size: 0.8rem; color: var(--muted); margin-top: 10px; }
+.ex-status.is-busy { color: var(--teal); }
+.ex-status.is-busy::before { content: '⏳ '; }
+.ex-table-wrap { overflow-x: auto; }
+.ex-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.ex-table th, .ex-table td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.ex-table th { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.ex-name { font-family: var(--mono, monospace); font-size: 0.76rem; word-break: break-all; }
+.ex-badge { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; background: var(--teal); color: #fff; border-radius: 8px; padding: 1px 8px; }
+.ex-actions { display: flex; gap: 8px; align-items: center; }
+.ex-link { color: var(--teal); font-weight: 600; text-decoration: none; white-space: nowrap; }
+.ex-link:hover { text-decoration: underline; }
+.ex-del { color: #b3322c; padding: 2px 8px; }
+
 /* --- Fokus papan kekunci --- */
 :focus-visible {
   outline: 2px solid var(--gold);

@@ -295,6 +295,15 @@ const api = {
   },
   getPreview(projectId) {
     return this.req('GET', '/api/projects/' + projectId + '/preview');
+  },
+  exportProject(projectId, type, opts) {
+    return this.req('POST', '/api/projects/' + projectId + '/export/' + type, opts || {});
+  },
+  listExports(projectId) {
+    return this.req('GET', '/api/projects/' + projectId + '/exports');
+  },
+  deleteExport(projectId, fileRef) {
+    return this.req('DELETE', '/api/projects/' + projectId + '/exports/' + encodeURIComponent(fileRef));
   }
 };
 
@@ -737,6 +746,7 @@ async function renderDetail(id) {
   const tabImage = el('button', { class: 'tab', type: 'button', text: 'Image' });
   const tabProduction = el('button', { class: 'tab', type: 'button', text: 'Production' });
   const tabPreview = el('button', { class: 'tab', type: 'button', text: 'Preview' });
+  const tabExport = el('button', { class: 'tab', type: 'button', text: 'Export' });
   const content = el('div', { class: 'tab-content' });
 
   function setTab(name) {
@@ -752,6 +762,7 @@ async function renderDetail(id) {
     tabImage.className = 'tab';
     tabProduction.className = 'tab';
     tabPreview.className = 'tab';
+    tabExport.className = 'tab';
     if (name === 'watak') {
       tabWatak.className = 'tab is-active';
       renderCharacterTab(id, content, updateStatus);
@@ -782,6 +793,9 @@ async function renderDetail(id) {
     } else if (name === 'preview') {
       tabPreview.className = 'tab is-active';
       renderPreviewTab(id, content, updateStatus);
+    } else if (name === 'export') {
+      tabExport.className = 'tab is-active';
+      renderExportTab(id, content, updateStatus);
     } else {
       tabTeks.className = 'tab is-active';
       renderTextTab(id, content, updateStatus);
@@ -800,8 +814,9 @@ async function renderDetail(id) {
   tabImage.addEventListener('click', function () { setTab('image'); });
   tabProduction.addEventListener('click', function () { setTab('production'); });
   tabPreview.addEventListener('click', function () { setTab('preview'); });
+  tabExport.addEventListener('click', function () { setTab('export'); });
 
-  view.appendChild(el('div', { class: 'tabs' }, [tabTeks, tabWatak, tabBabak, tabPanel, tabScript, tabVisual, tabPrompt, tabReview, tabImage, tabProduction, tabPreview]));
+  view.appendChild(el('div', { class: 'tabs' }, [tabTeks, tabWatak, tabBabak, tabPanel, tabScript, tabVisual, tabPrompt, tabReview, tabImage, tabProduction, tabPreview, tabExport]));
   view.appendChild(content);
   setTab('teks');
 }
@@ -3565,6 +3580,138 @@ async function renderPreviewTab(id, container, updateStatus) {
     else if (ev.key === 'Home') { main.scrollTo({ top: 0, behavior: 'smooth' }); ev.preventDefault(); }
     else if (ev.key === 'End') { main.scrollTo({ top: main.scrollHeight, behavior: 'smooth' }); ev.preventDefault(); }
   });
+}
+
+// ---- Tab: Export (Export Studio — Fasa 16) -------------------------------
+let exportOpts = { includeImages: true, includePrompt: true, includeReview: true, includeMetadata: true, compressImages: false, imageQuality: 80 };
+
+function fmtBytes(n) {
+  if (n == null) return '-';
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+  return (n / 1024 / 1024).toFixed(2) + ' MB';
+}
+function fmtDate(iso) {
+  try { const d = new Date(iso); return d.toLocaleString(); } catch (e) { return iso || '-'; }
+}
+
+async function renderExportTab(id, container, updateStatus) {
+  container.innerHTML = '';
+
+  // --- Opsyen export ---
+  function optCb(key, label) {
+    const cb = el('input', { type: 'checkbox' });
+    cb.checked = !!exportOpts[key];
+    cb.addEventListener('change', function () { exportOpts[key] = cb.checked; });
+    return el('label', { class: 'pv-opt' }, [cb, el('span', { text: label })]);
+  }
+  const qInput = el('input', { class: 'field-input ex-quality', type: 'number', min: '1', max: '100', value: String(exportOpts.imageQuality) });
+  qInput.addEventListener('change', function () {
+    let v = parseInt(qInput.value, 10); if (!Number.isFinite(v)) v = 80; v = Math.min(100, Math.max(1, v));
+    exportOpts.imageQuality = v; qInput.value = String(v);
+  });
+
+  const optionsCard = el('div', { class: 'ex-card' }, [
+    el('div', { class: 'ex-card-title', text: 'Export Options' }),
+    el('div', { class: 'ex-opts' }, [
+      optCb('includeImages', 'Include Images'), optCb('includePrompt', 'Include Prompt'),
+      optCb('includeReview', 'Include Review'), optCb('includeMetadata', 'Include Metadata'),
+      optCb('compressImages', 'Compress Images'),
+      el('label', { class: 'pv-ctrl' }, [el('span', { text: 'Image Quality' }), qInput])
+    ]),
+    el('p', { class: 'pr-muted', text: 'Semua export READ ONLY — tidak mengubah projek, tidak menjana AI, tidak mencipta job. Sumber: Preview API.' })
+  ]);
+  container.appendChild(optionsCard);
+
+  // --- Kad jenis export ---
+  const statusLine = el('div', { class: 'ex-status', text: '' });
+  const TYPES = [
+    ['html', 'Export HTML', 'Tapak offline (index.html + assets + images), tema gelap, infinite scroll'],
+    ['pdf', 'Export PDF', 'Gabung semua panel: imej / caption / dialog / narasi / bab'],
+    ['zip', 'Export ZIP', 'project.json, chapters, panels, scripts, visuals, prompts, review, images/'],
+    ['json', 'Export JSON', 'Export penuh (pretty-print, UTF-8)'],
+    ['markdown', 'Export Markdown', 'Format dokumentasi (.md)'],
+    ['prompts', 'Export Prompt Pack', 'prompt.txt + negative_prompt.txt (zip), tersusun ikut panel']
+  ];
+
+  let historyBody = null;
+  async function refreshHistory() {
+    if (!historyBody) return;
+    historyBody.innerHTML = '';
+    historyBody.appendChild(el('tr', {}, [el('td', { colspan: '6', class: 'pr-muted', text: 'Memuatkan…' })]));
+    let data;
+    try { data = await api.listExports(id); }
+    catch (e) { historyBody.innerHTML = ''; historyBody.appendChild(el('tr', {}, [el('td', { colspan: '6', class: 'error-text', text: 'Gagal: ' + e.message })])); return; }
+    historyBody.innerHTML = '';
+    const items = (data && data.exports) || [];
+    if (!items.length) { historyBody.appendChild(el('tr', {}, [el('td', { colspan: '6', class: 'pr-muted', text: 'Tiada export lagi.' })])); return; }
+    items.forEach(function (it) {
+      const dl = el('a', { class: 'ex-link', href: it.url, text: 'Download' });
+      dl.setAttribute('download', it.name); dl.setAttribute('target', '_blank');
+      const del = el('button', { class: 'btn-ghost ex-del', type: 'button', text: 'Delete' });
+      del.addEventListener('click', async function () {
+        del.disabled = true;
+        try { await api.deleteExport(id, it.file); toast('Fail dipadam', 'success'); refreshHistory(); }
+        catch (e) { del.disabled = false; toast('Gagal padam: ' + e.message, 'error'); }
+      });
+      historyBody.appendChild(el('tr', {}, [
+        el('td', { class: 'ex-name', text: it.name }),
+        el('td', {}, [el('span', { class: 'ex-badge', text: it.type })]),
+        el('td', { text: fmtBytes(it.size) }),
+        el('td', { class: 'pr-muted', text: fmtDate(it.created_at) }),
+        el('td', {}, [el('span', { class: 'pr-pill', text: it.status || 'ready' })]),
+        el('td', {}, [el('div', { class: 'ex-actions' }, [dl, del])])
+      ]));
+    });
+  }
+
+  const buttons = [];
+  function setBusy(busy, msg) {
+    buttons.forEach(function (b) { b.disabled = busy; });
+    statusLine.textContent = msg || '';
+    statusLine.className = 'ex-status' + (busy ? ' is-busy' : '');
+  }
+  const cards = TYPES.map(function (t) {
+    const btn = el('button', { class: 'btn-primary ex-btn', type: 'button', text: t[1] });
+    buttons.push(btn);
+    btn.addEventListener('click', async function () {
+      setBusy(true, 'Menjana ' + t[1] + '…');
+      try {
+        const r = await api.exportProject(id, t[0], exportOpts);
+        setBusy(false, '');
+        toast(t[1] + ' siap: ' + (r.export ? r.export.name : ''), 'success');
+        refreshHistory();
+      } catch (e) { setBusy(false, ''); toast(t[1] + ' gagal: ' + e.message, 'error'); }
+    });
+    return el('div', { class: 'ex-type' }, [
+      el('div', { class: 'ex-type-head', text: t[1] }),
+      el('div', { class: 'ex-type-desc', text: t[2] }),
+      btn
+    ]);
+  });
+  container.appendChild(el('div', { class: 'ex-card' }, [
+    el('div', { class: 'ex-card-title', text: 'Export Studio' }),
+    el('div', { class: 'ex-grid' }, cards),
+    statusLine
+  ]));
+
+  // --- Sejarah export ---
+  const refreshBtn = el('button', { class: 'btn-ghost', type: 'button', text: '↻ Refresh' });
+  refreshBtn.addEventListener('click', function () { refreshHistory(); });
+  historyBody = el('tbody');
+  const table = el('table', { class: 'ex-table' }, [
+    el('thead', {}, [el('tr', {}, [
+      el('th', { text: 'Nama Fail' }), el('th', { text: 'Jenis' }), el('th', { text: 'Saiz' }),
+      el('th', { text: 'Tarikh' }), el('th', { text: 'Status' }), el('th', { text: 'Tindakan' })
+    ])]),
+    historyBody
+  ]);
+  container.appendChild(el('div', { class: 'ex-card' }, [
+    el('div', { class: 'ex-card-head' }, [el('div', { class: 'ex-card-title', text: 'Export History' }), refreshBtn]),
+    el('div', { class: 'ex-table-wrap' }, [table])
+  ]));
+
+  refreshHistory();
 }
 
 // ---- Router ---------------------------------------------------------------

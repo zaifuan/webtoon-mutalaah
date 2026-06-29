@@ -25,6 +25,8 @@ const promptContextRouter = require('./routes/promptContext');
 const imageRouter = require('./routes/image');
 const pipelineRouter = require('./routes/pipeline');
 const previewRouter = require('./routes/preview');
+const exportRouter = require('./routes/export');
+const exportService = require('./services/exportService');
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -100,6 +102,9 @@ app.use('/api', pipelineRouter);
 // Fasa 15 — Webtoon Preview Engine (read-only). /projects/:id/preview.
 app.use('/api', previewRouter);
 
+// Fasa 16 — Export Studio (read-only). /projects/:id/export/* + /exports.
+app.use('/api', exportRouter);
+
 // Apa-apa laluan /api/* yang tidak dikenali → 404 JSON yang kemas.
 app.use('/api', (req, res) => {
   res.status(404).json({ ok: false, error: 'Laluan API tidak dijumpai' });
@@ -114,6 +119,11 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 // Pastikan folder asas wujud (uploads/images) supaya muat naik & import berfungsi.
 imageAssetService.ensureBaseDirSync();
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
+
+// Fasa 16 — sajikan fail export secara statik di /exports/project-<id>/<type>/...
+// Pastikan folder asas wujud supaya export & muat turun berfungsi.
+exportService.ensureRootSync();
+app.use('/exports', express.static(exportService.EXPORTS_ROOT));
 
 // ---------------------------------------------------------------------------
 // Mula pelayan
