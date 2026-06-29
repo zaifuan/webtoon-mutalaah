@@ -36,6 +36,9 @@ services:
       PGDATABASE: ${PGDATABASE:-webtoon_mutalaah}
       IMAGE_PROVIDER: ${IMAGE_PROVIDER:-dummy-image}
       COMFYUI_BASE_URL: ${COMFYUI_BASE_URL:-http://127.0.0.1:8188}
+      AI_PROVIDER: ${AI_PROVIDER:-dummy}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://localhost:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
     ports:
       - "${APP_PORT:-3000}:3000"
     # Fasa 8 — ikat folder uploads ke host supaya gambar kekal selepas rebuild

@@ -1,0 +1,28 @@
+TASK: Rewrite the given image prompt into a richer, more concrete English image prompt for a Stable Diffusion model (SDXL Turbo), keeping the same meaning and scene.
+
+Original prompt:
+{{PROMPT}}
+
+Panel context:
+{{PANEL}}
+
+Scene context:
+{{SCENE}}
+
+Visual direction:
+{{VISUAL}}
+
+Character DNA:
+{{CHARACTER}}
+
+Requirements:
+- Output English only, optimized for SDXL Turbo (short, comma-separated descriptive tags work better than long prose).
+- Keep all safety rules: for noble figures (prophets/wali) the face MUST stay fully replaced by soft glowing light — no eyes, nose, mouth, or facial features. Reflect this in negative_prompt.
+- Do NOT invent new characters, text, or story facts not present in the context.
+- Preserve the panel composition, camera, lighting, and character placement from the visual direction.
+- Improve vividness, clarity, and rendering quality tags.
+
+Reply with ONLY one valid JSON object, no other text:
+{"prompt_text":"...","negative_prompt":"...","notes":""}
+
+{{USER_INPUT}}

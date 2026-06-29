@@ -247,6 +247,111 @@ async function resolveImagePrompt(payload) {
   });
 }
 
+// ---- PROMPT_REWRITE via Ollama (sebelum hantar ke imageAdapter) -----------
+// Selesaikan prompt asal (dari resolveImagePrompt) dengan konteks penuh
+// (DNA watak + visual JSON + scene + panel), lalu minta Ollama menjana semula
+// prompt SDXL Turbo yang lebih kaya. Output Ollama menjadi prompt AKHIR yang
+// dihantar ke imageAdapter (ComfyUI). imageAdapter/ComfyUI/workflow JSON TIDAK
+// disentuh — kita hanya mengganti nilai prompt dalam payload.
+//
+// Fallback selamat: jika Ollama tidak wujud/tidak membalas/tidak memberi JSON
+// sah, kekalkan prompt asal (resolveImagePrompt) supaya sistem tetap berjalan.
+async function rewriteImagePrompt(resolvedPayload) {
+  const p = (resolvedPayload && typeof resolvedPayload === 'object') ? resolvedPayload : {};
+  const panelId = (p.panel && p.panel.id) || p.panel_id || null;
+  const basePrompt = p.prompt || p.prompt_text || '';
+  const baseNegative = p.negative_negative || p.negative_prompt || '';
+
+  // Tidak boleh rewrite tanpa prompt asal.
+  if (!basePrompt) return resolvedPayload;
+
+  // Kumpulkan konteks penuh: panel + scene + visual + DNA watak.
+  let context = null;
+  if (panelId) {
+    try { context = await loadPanelContextForRewrite(panelId); }
+    catch (e) { /* abai — guna konteks minimum */ }
+  }
+
+  // Bina payload rewrite: prompt asal + DNA + visual + scene + panel.
+  const rewritePayload = Object.assign({}, p, {
+    prompt: basePrompt,
+    negative_prompt: baseNegative,
+    panel: context ? context.panel : (p.panel || null),
+    scene: context ? context.scene : (p.scene || null),
+    visual: context ? context.visual : null,
+    character: context ? context.charList : null, // DNA watak (placeholder {{CHARACTER}})
+    task: 'PROMPT_REWRITE'
+  });
+
+  // Panggil Ollama (provider TERTENTU, bukan lalai) untuk PROMPT_REWRITE.
+  let rewritten = null;
+  try {
+    const out = await aiAdapter.runJobOn('ollama', 'PROMPT_REWRITE', rewritePayload);
+    if (out && out.success !== false && out.prompt_text && String(out.prompt_text).trim()) {
+      rewritten = { prompt: String(out.prompt_text).trim(), negative_prompt: out.negative_prompt || baseNegative };
+      console.log('[production] PROMPT_REWRITE ollama OK panel#' + panelId + ' (' + out.latency_ms + 'ms)');
+    } else if (out && out.success === false) {
+      console.warn('[production] PROMPT_REWRITE ollama gagal: ' + (out.error || '?') + ' — guna prompt asal');
+    }
+  } catch (e) {
+    console.warn('[production] PROMPT_REWRITE ollama exception: ' + e.message + ' — guna prompt asal');
+  }
+
+  // Output Ollama menjadi prompt AKHIR; jika tiada → kekalkan prompt asal.
+  return Object.assign({}, p, {
+    prompt: (rewritten && rewritten.prompt) || basePrompt,
+    negative_prompt: (rewritten && rewritten.negative_prompt) || baseNegative
+  }, rewritten ? { prompt_rewritten: true, prompt_original: basePrompt } : { prompt_rewritten: false });
+}
+
+// Muat konteks panel penuh untuk PROMPT_REWRITE: panel + scene + visual JSON +
+// DNA watak (senarai { code, type, face_policy, visual_dna }).
+async function loadPanelContextForRewrite(panelId) {
+  const jSQL =
+    'SELECT p.id AS panel_id, p.project_id, p.scene_id, p.panel_no, p.panel_type, ' +
+    'p.visual_ms, p.caption_ms, p.dialogue_ms, p.characters_json, ' +
+    'v.shot, v.angle, v.lens, v.composition, v.lighting, v.color_palette, ' +
+    'v.atmosphere, v.focus, v.depth, v.face_policy, v.characters_layout, ' +
+    's.scene_no, s.scene_type, s.location AS scene_location, s.mood AS scene_mood, s.summary_ms ' +
+    'FROM panels p LEFT JOIN visuals v ON v.panel_id = p.id ' +
+    'LEFT JOIN scenes s ON s.id = p.scene_id WHERE p.id = $1';
+  const rows = await pool.query(jSQL, [panelId]);
+  if (!rows.rows.length) return null;
+  const r = rows.rows[0];
+  function jget(v) { if (typeof v === 'string') { try { return JSON.parse(v); } catch (e) { return null; } } return v; }
+
+  const crows = await pool.query(
+    'SELECT character_code, character_type, face_policy, visual_dna FROM characters WHERE project_id = $1',
+    [r.project_id]
+  );
+  // DNA watak: senarai ringkas { code, type, face_policy, visual_dna }.
+  const charList = crows.rows.map(function (row) {
+    return {
+      code: row.character_code, type: row.character_type,
+      face_policy: row.face_policy, visual_dna: jget(row.visual_dna) || {}
+    };
+  });
+
+  return {
+    panel: {
+      id: r.panel_id, panel_no: r.panel_no, panel_type: r.panel_type,
+      visual_ms: r.visual_ms, caption_ms: r.caption_ms, dialogue_ms: r.dialogue_ms,
+      characters_json: jget(r.characters_json) || []
+    },
+    scene: {
+      scene_no: r.scene_no, scene_type: r.scene_type, location: r.scene_location,
+      mood: r.scene_mood, summary_ms: r.summary_ms
+    },
+    visual: {
+      shot: r.shot, angle: r.angle, lens: r.lens, composition: r.composition,
+      lighting: r.lighting, color_palette: r.color_palette, atmosphere: r.atmosphere,
+      focus: r.focus, depth: r.depth, face_policy: r.face_policy,
+      characters_layout: jget(r.characters_layout) || []
+    },
+    charList: charList
+  };
+}
+
 // ---- Job lifecycle --------------------------------------------------------
 
 // Ambil job seterusnya yang LAYAK:
@@ -386,8 +491,16 @@ async function dummyTick() {
         // diganti dengan prompt panel sebenar, bukan literal %PROMPT%.
         let imagePayload = job.payload_json;
         if (job.job_type === 'IMAGE_GENERATION') {
+          // 1) Selesaikan prompt asal dari image_prompts (per panel_id) supaya
+          //    %PROMPT% dalam turbo.json diganti, bukan literal %PROMPT%.
           try { imagePayload = await resolveImagePrompt(job.payload_json); }
           catch (e) { console.error('[production] resolve prompt:', e.message); }
+          // 2) PROMPT_REWRITE via Ollama (provider 'ollama' khusus): kaya-kan
+          //    prompt asal dengan DNA watak + visual + scene + panel. Output
+          //    Ollama menjadi prompt AKHIR yang dihantar ke imageAdapter.
+          //    Fallback selamat: jika Ollama gagal, prompt asal kekal digunakan.
+          try { imagePayload = await rewriteImagePrompt(imagePayload); }
+          catch (e) { console.error('[production] rewrite prompt:', e.message); }
           // Log ringkas untuk QA: sahkan prompt sebenar dihantar ke adapter.
           const _p = (imagePayload && imagePayload.prompt) || '';
           if (_p) console.log('[production] IMAGE_GENERATION job#' + job.id + ' prompt="' + _p.slice(0, 80) + (_p.length > 80 ? '…' : '') + '"');
@@ -440,6 +553,7 @@ module.exports = {
   registerWorker, heartbeat,
   linkGeneratedImage,
   resolveImagePrompt,
+  rewriteImagePrompt,
   startDummyWorker, stopDummyWorker,
   DUMMY_NAME
 };

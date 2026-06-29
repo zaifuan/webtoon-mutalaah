@@ -31,6 +31,7 @@ const JOB_METHOD = {
   SCRIPT_GENERATION: 'generateScript',
   VISUAL_GENERATION: 'generateVisual',
   PROMPT_GENERATION: 'generatePrompt',
+  PROMPT_REWRITE: 'rewritePrompt',
   IMAGE_GENERATION: 'generateImage',
   REVIEW: 'review',
   EXPORT: 'export'
@@ -53,6 +54,23 @@ async function runJob(jobType, payload) {
   return Object.assign({ job_type: jobType, method: method }, result);
 }
 
+// Jalankan satu job pada PROVIDER TERTENTU (bukan default). Dipakai oleh
+// Production Engine untuk PROMPT_REWRITE yang WAJIB guna 'ollama' walau apa
+// pun provider AI lalai. Jika provider tidak wujud/tidak ada kaedah → pulang
+// { success:false } supaya pemanggil boleh fallback selamat.
+async function runJobOn(provider, jobType, payload) {
+  const adapter = registry.get(provider);
+  if (!adapter) {
+    return { success: false, provider: provider || registry.getDefault(), error: 'Provider AI tidak wujud: ' + provider, latency_ms: 0, tokens: 0, cost: 0 };
+  }
+  const method = JOB_METHOD[jobType];
+  if (!method || typeof adapter[method] !== 'function') {
+    return { success: false, provider: adapter.name || provider, error: 'job_type tiada pemetaan/kaedah: ' + jobType, latency_ms: 0, tokens: 0, cost: 0 };
+  }
+  const result = await adapter[method](payload || {});
+  return Object.assign({ job_type: jobType, method: method, forced_provider: provider }, result);
+}
+
 // Facade per-jenis (delegasi ke adapter semasa).
 function delegate(method) {
   return async function (payload) {
@@ -66,6 +84,7 @@ module.exports = {
   registry,
   JOB_METHOD,
   runJob,
+  runJobOn,
   currentAdapter,
   generateText: delegate('generateText'),
   generateCharacter: delegate('generateCharacter'),
@@ -74,6 +93,7 @@ module.exports = {
   generateScript: delegate('generateScript'),
   generateVisual: delegate('generateVisual'),
   generatePrompt: delegate('generatePrompt'),
+  rewritePrompt: delegate('rewritePrompt'),
   generateImage: delegate('generateImage'),
   review: delegate('review'),
   export: delegate('export')

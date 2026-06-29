@@ -136,6 +136,30 @@ async function generatePrompt(payload) {
   return result(true, { latency_ms: r.latency, prompt_version: built.version, raw_text: r.content, note: 'model tidak menghasilkan JSON sah' });
 }
 
+// PROMPT_REWRITE: ambil prompt asal + DNA watak + visual + scene + panel,
+// minta Ollama hasilkan prompt SDXL Turbo yang lebih kaya. Struktur output sama
+// dgn generatePrompt (prompt_text + negative_prompt). Dipanggil oleh Production
+// Engine melalui runJobOn('ollama', 'PROMPT_REWRITE', payload) sebelum imej
+// dihantar ke imageAdapter (ComfyUI).
+async function rewritePrompt(payload) {
+  // rewrite memerlukan sekurangnya prompt asal + sedikit konteks panel.
+  const hasPrompt = !!(payload && typeof payload === 'object' &&
+    (payload.prompt || (payload.prompt_text && typeof payload.prompt_text === 'string')));
+  if (!hasPrompt || !payloadHasContext(payload)) {
+    return result(true, { latency_ms: 0, note: 'payload tidak lengkap — respons fallback tempatan', prompt_text: payload && (payload.prompt || payload.prompt_text) || '', negative_prompt: payload && payload.negative_prompt || '', incomplete_payload: true });
+  }
+  let built;
+  try { built = await builder.buildRewritePrompt(payload); }
+  catch (e) { return result(false, { latency_ms: 0, error: 'Prompt builder gagal: ' + (e && e.message ? e.message : String(e)) }); }
+  const r = await chat(built.messages);
+  if (!r.ok) return result(false, { latency_ms: r.latency, error: r.error, timeout: !!r.timeout, prompt_version: built.version });
+  const j = tryParseJson(r.content);
+  if (j) {
+    return result(true, { latency_ms: r.latency, prompt_version: built.version, prompt_text: j.prompt_text || '', negative_prompt: j.negative_prompt || '', notes: j.notes || '' });
+  }
+  return result(true, { latency_ms: r.latency, prompt_version: built.version, raw_text: r.content, note: 'model tidak menghasilkan JSON sah' });
+}
+
 async function review(payload) {
   if (!payloadHasContext(payload)) {
     return result(true, { latency_ms: 0, note: 'payload tidak lengkap — respons fallback tempatan', qa_status: 'ok', issues: [] });
@@ -180,6 +204,7 @@ module.exports = {
   generateScript: generateScript,
   generateVisual: fallback('generateVisual'),
   generatePrompt: generatePrompt,
+  rewritePrompt: rewritePrompt,
   generateImage: generateImage,
   review: review,
   export: fallback('export')

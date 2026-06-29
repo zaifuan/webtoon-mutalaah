@@ -148,6 +148,7 @@ async function buildMessages(taskTemplate, payload) {
 async function buildGenerateScriptPrompt(payload) { return buildMessages('generate_script', payload); }
 async function buildGeneratePromptPrompt(payload) { return buildMessages('generate_prompt', payload); }
 async function buildReviewPrompt(payload) { return buildMessages('review', payload); }
+async function buildRewritePrompt(payload) { return buildMessages('prompt_rewrite', payload); }
 
 // Pemetaan task → fungsi (untuk endpoint preview & guna umum).
 async function buildByTask(task, payload) {
@@ -155,6 +156,8 @@ async function buildByTask(task, payload) {
     case 'system': return buildSystemPrompt(payload);
     case 'prompt':
     case 'generate_prompt': return buildGeneratePromptPrompt(payload);
+    case 'rewrite':
+    case 'prompt_rewrite': return buildRewritePrompt(payload);
     case 'review': return buildReviewPrompt(payload);
     case 'script':
     case 'generate_script':
@@ -164,7 +167,7 @@ async function buildByTask(task, payload) {
 
 module.exports = {
   VERSION: config.PROMPT_VERSION,
-  TEMPLATES: ['system', 'generate_script', 'generate_prompt', 'review'],
+  TEMPLATES: ['system', 'generate_script', 'generate_prompt', 'prompt_rewrite', 'review'],
   loadTemplate,
   applyPlaceholders,
   countPlaceholders,
@@ -173,6 +176,7 @@ module.exports = {
   buildGenerateScriptPrompt,
   buildGeneratePromptPrompt,
   buildReviewPrompt,
+  buildRewritePrompt,
   buildMessages,
   buildByTask
 };

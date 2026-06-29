@@ -38,6 +38,21 @@ async function runWithBuilder(kind, taskTemplate, payload) {
   return dummyResult({ kind: kind, prompt_version: built ? built.version : null, prompt_template: built ? built.template : null });
 }
 
+// PROMPT_REWRITE (simulasi): passthrough — pulang balik prompt asal tanpa ubah.
+// Adapter dummy tidak menjana semula teks; ia hanya mengekalkan behavior lama
+// supaya sistem berfungsi apabila AI_PROVIDER=dummy. Adapter sebenar (ollama)
+// yang melakukan rewrite.
+async function rewritePrompt(payload) {
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  await sleep(LATENCY_MS);
+  return dummyResult({
+    kind: 'rewritePrompt',
+    prompt_text: p.prompt || p.prompt_text || '',
+    negative_prompt: p.negative_prompt || '',
+    note: 'rewrite simulasi (passthrough) — guna adapter sebenar untuk hasilkan prompt baru'
+  });
+}
+
 module.exports = {
   name: 'dummy',
   info: {
@@ -56,6 +71,7 @@ module.exports = {
   async generateScript(payload) { return runWithBuilder('generateScript', 'generate_script', payload); },
   async generateVisual(payload) { return run('generateVisual', payload); },
   async generatePrompt(payload) { return runWithBuilder('generatePrompt', 'generate_prompt', payload); },
+  async rewritePrompt(payload) { return rewritePrompt(payload); },
   async generateImage(payload) { return run('generateImage', payload); },
   async review(payload) { return runWithBuilder('review', 'review', payload); },
   async export(payload) { return run('export', payload); }
