@@ -34,6 +34,8 @@ services:
       PGUSER: ${PGUSER:-webtoon}
       PGPASSWORD: ${PGPASSWORD:-webtoon}
       PGDATABASE: ${PGDATABASE:-webtoon_mutalaah}
+      IMAGE_PROVIDER: ${IMAGE_PROVIDER:-dummy-image}
+      COMFYUI_BASE_URL: ${COMFYUI_BASE_URL:-http://127.0.0.1:8188}
     ports:
       - "${APP_PORT:-3000}:3000"
     # Fasa 8 — ikat folder uploads ke host supaya gambar kekal selepas rebuild
