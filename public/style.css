@@ -5,28 +5,47 @@
    ========================================================================= */
 
 :root {
-  --ink: #161b2e;
-  --ink-2: #20283f;
-  --paper: #f6f0e2;
-  --paper-edge: #e7dec8;
-  --gold: #d7a64a;
-  --gold-deep: #bd8a2f;
-  --teal: #2f8f86;
-  --ok: #46b06a;
-  --alert: #d96b5b;
+  /* ===== Fasa 17 — Tema gelap dashboard (hitam · emerald · emas · kelabu gelap) =====
+     Makna pemboleh ubah dibalikkan: 'paper' kini permukaan gelap, 'ink' kini
+     warna cerah (sempadan + teks), 'line' kini garis halus cerah. Majoriti
+     komponen sedia ada yang guna var(--paper/--ink/--line) bertema gelap automatik. */
+  --bg: #0d1117;            /* latar halaman paling gelap */
+  --bg-2: #11161d;          /* latar gradient atas */
+  --surface: #161c24;       /* permukaan kad */
+  --surface-2: #1c232c;     /* permukaan alt / kepala jadual */
+  --surface-3: #232c37;     /* hover / chip */
+  --input-bg: #0f141b;      /* latar medan input */
 
-  --text: #1c2233;
-  --muted: #6b6655;
-  --light: #efe9da;
-  --light-muted: rgba(239, 233, 218, 0.66);
+  --ink: #e8edf3;           /* (dahulu gelap) kini cerah → sempadan & teks utama */
+  --ink-2: #11161d;         /* kekal gelap (latar gradient halaman) */
+  --paper: #161c24;         /* (dahulu krim) kini permukaan kad gelap */
+  --paper-edge: #1c232c;    /* (dahulu krim tua) kini permukaan kad alt gelap */
 
-  --line: rgba(28, 34, 51, 0.14);
-  --radius: 8px;
-  --shadow: 5px 5px 0 0 rgba(0, 0, 0, 0.32);
+  --gold: #e2b659;
+  --gold-deep: #c9982f;
+  --teal: #2fb78f;          /* emerald */
+  --teal-deep: #1f9676;
+  --ok: #34c77b;
+  --alert: #e5685c;
+  --danger: #e5685c;
+
+  --text: #e8edf3;          /* teks utama cerah */
+  --text-soft: #c3ccd6;     /* teks sekunder */
+  --muted: #93a0ad;         /* teks pudar (kontras mencukupi pada gelap) */
+  --light: #eef3f8;
+  --light-muted: rgba(238, 243, 248, 0.7);
+
+  --line: rgba(232, 237, 243, 0.13);        /* sempadan halus cerah pada gelap */
+  --line-strong: rgba(232, 237, 243, 0.26);
+  --radius: 12px;
+  --radius-sm: 9px;
+  --shadow: 0 10px 28px rgba(0, 0, 0, 0.42);
+  --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.32);
 
   --display: "Space Grotesk", system-ui, sans-serif;
   --arabic: "Amiri", "Reem Kufi", serif;
   --kufi: "Reem Kufi", system-ui, sans-serif;
+  --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 }
 
 * {
@@ -43,7 +62,7 @@ body {
   min-height: 100dvh;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color: var(--text);
-  background: radial-gradient(130% 100% at 50% -10%, var(--ink-2) 0%, var(--ink) 58%);
+  background: radial-gradient(140% 110% at 50% -10%, var(--bg-2) 0%, var(--bg) 60%);
   background-attachment: fixed;
 }
 
@@ -1684,4 +1703,245 @@ select.field-input {
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* =========================================================================
+   FASA 17 — UI POLISH / DASHBOARD REDESIGN
+   (UI sahaja: layout sidebar, header, normalisasi butang/borang/jadual,
+    kontras tema gelap. Tiada perubahan logik.)
+   ========================================================================= */
+
+/* ---------- Shell dashboard: sidebar kiri + content kanan ---------- */
+.dash { display: flex; align-items: stretch; gap: 0; width: 100%; }
+.dash-side {
+  position: sticky; top: 0; align-self: flex-start;
+  flex: 0 0 220px; width: 220px; height: 100dvh;
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 14px 10px;
+  background: linear-gradient(180deg, #121821 0%, #0c1118 100%);
+  border-right: 1px solid var(--line);
+  transition: flex-basis .18s ease, width .18s ease;
+  overflow: hidden;
+}
+.dash-side-top {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 2px 6px 12px; margin-bottom: 4px; border-bottom: 1px solid var(--line);
+}
+.dash-brand { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.dash-brand-mark { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; flex: 0 0 28px; color: var(--teal); }
+.dash-brand-mark svg { width: 24px; height: 24px; }
+.dash-brand-text { font-family: var(--display); font-weight: 700; font-size: 1rem; letter-spacing: -.01em; color: var(--light); white-space: nowrap; }
+.dash-collapse { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; flex: 0 0 30px; border-radius: 9px; border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--text-soft); cursor: pointer; transition: background .14s, color .14s; }
+.dash-collapse:hover { background: var(--surface-3); color: var(--text); }
+.dash-collapse svg { width: 16px; height: 16px; }
+
+.dash-nav { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; padding-right: 2px; }
+.dash-nav .tab {
+  display: flex; align-items: center; gap: 11px; width: 100%;
+  text-align: left; padding: 9px 11px;
+  border: 1px solid transparent; border-radius: 10px;
+  background: transparent; color: var(--text-soft);
+  font-family: var(--display); font-weight: 600; font-size: .87rem; line-height: 1;
+  cursor: pointer; transition: background .14s, color .14s, border-color .14s; white-space: nowrap;
+}
+.dash-nav .tab:hover { background: var(--surface-2); color: var(--text); }
+.dash-nav .tab.is-active {
+  background: linear-gradient(180deg, rgba(47,183,143,.20) 0%, rgba(47,183,143,.10) 100%);
+  color: #d7f7ec; border-color: rgba(47,183,143,.42);
+  box-shadow: inset 3px 0 0 0 var(--teal);
+}
+.dash-nav-ico { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; flex: 0 0 18px; color: currentColor; }
+.dash-nav-ico svg { width: 18px; height: 18px; display: block; }
+.dash-nav-label { overflow: hidden; text-overflow: ellipsis; }
+.dash-side-foot { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--line); }
+.dash-side-foot .back-link { display: inline-flex; align-items: center; gap: 6px; color: var(--text-soft); font-size: .82rem; text-decoration: none; padding: 4px 6px; }
+.dash-side-foot .back-link:hover { color: var(--teal); }
+
+.dash-main { flex: 1 1 auto; min-width: 0; padding: 16px clamp(12px, 2.4vw, 28px) 48px; }
+
+/* Collapsed → rel ikon */
+.dash--collapsed .dash-side { flex-basis: 66px; width: 66px; }
+.dash--collapsed .dash-nav-label,
+.dash--collapsed .dash-brand-text { display: none; }
+.dash--collapsed .dash-nav .tab { justify-content: center; padding: 10px 0; gap: 0; }
+.dash--collapsed .dash-nav .tab.is-active { box-shadow: inset 0 0 0 1px rgba(47,183,143,.5); }
+.dash--collapsed .dash-side-top { justify-content: center; }
+.dash--collapsed .dash-collapse { display: none; }
+.dash--collapsed .dash-side-foot { text-align: center; }
+.dash--collapsed .dash-side-foot .back-link { font-size: 0; gap: 0; justify-content: center; }
+.dash--collapsed .dash-side-foot .back-link::before { content: "←"; font-size: 1.1rem; }
+
+/* ---------- Header projek (kad moden) ---------- */
+.dash-header {
+  background: linear-gradient(180deg, var(--surface-2) 0%, var(--surface) 100%);
+  border: 1px solid var(--line); border-radius: 14px;
+  padding: 16px 18px; margin-bottom: 16px; box-shadow: var(--shadow-sm);
+}
+.dash-header .detail-head-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.dash-header .detail-titles { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.dash-header .detail-title { font-family: var(--display); font-size: 1.5rem; font-weight: 700; color: var(--light); letter-spacing: -.01em; line-height: 1.1; }
+.dash-header .detail-ar { font-family: var(--arabic); font-size: 1.18rem; color: var(--gold); line-height: 1.3; }
+.detail-meta { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-top: 2px; }
+.detail-progress { display: flex; align-items: center; gap: 8px; }
+.detail-progress-bar { width: 150px; max-width: 40vw; height: 7px; border-radius: 6px; background: rgba(232,237,243,.12); overflow: hidden; }
+.detail-progress-fill { height: 100%; border-radius: 6px; background: linear-gradient(90deg, var(--teal), var(--gold)); transition: width .35s ease; }
+.detail-progress-pct { font-size: .74rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.dash-header .detail-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.dash-header .detail-desc { margin-top: 10px; color: var(--text-soft); font-size: .9rem; }
+
+/* ---------- Butang diseragamkan ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  font-family: var(--display); font-weight: 600; font-size: .86rem; line-height: 1;
+  padding: 9px 15px; border-radius: 10px; border: 1px solid transparent;
+  cursor: pointer; transition: background .14s, border-color .14s, color .14s, transform .04s, box-shadow .14s;
+}
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn-sm { padding: 6px 11px; font-size: .8rem; border-radius: 9px; }
+.btn-primary { background: var(--teal); color: #042018; border-color: var(--teal-deep); }
+.btn-primary:hover:not(:disabled) { background: var(--teal-deep); color: #eafff7; box-shadow: 0 4px 14px rgba(47,183,143,.28); }
+.btn-secondary { background: var(--surface-3); color: var(--text); border-color: var(--line-strong); }
+.btn-secondary:hover:not(:disabled) { background: #2b3540; }
+.btn-ghost { background: transparent; color: var(--text-soft); border-color: var(--line-strong); }
+.btn-ghost:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
+.btn-danger { background: rgba(229,104,92,.15); color: #ffb4ab; border-color: rgba(229,104,92,.5); }
+.btn-danger:hover:not(:disabled) { background: var(--danger); color: #fff; }
+.btn-success { background: rgba(52,199,123,.16); color: #9bf0c2; border-color: rgba(52,199,123,.5); }
+.btn-success:hover:not(:disabled) { background: var(--ok); color: #042018; }
+.btn-outline { background: transparent; color: var(--teal); border-color: var(--teal); }
+.btn-outline:hover:not(:disabled) { background: rgba(47,183,143,.12); color: #d7f7ec; }
+.btn.is-loading { color: transparent !important; position: relative; pointer-events: none; }
+.btn.is-loading::after { content: ""; position: absolute; width: 14px; height: 14px; border: 2px solid var(--text); border-top-color: transparent; border-radius: 50%; animation: btnspin .6s linear infinite; }
+@keyframes btnspin { to { transform: rotate(360deg); } }
+
+/* ---------- Borang diseragamkan (kontras) ---------- */
+input[type="text"], input[type="search"], input[type="number"], input[type="password"],
+input[type="email"], input[type="url"], textarea, select,
+.field-input, .editor-input, .pr-select, .pr-search, .pv-search, .ex-quality {
+  background: var(--input-bg) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+}
+input:focus, textarea:focus, select:focus,
+.field-input:focus, .editor-input:focus, .pr-select:focus, .pr-search:focus, .pv-search:focus, .ex-quality:focus {
+  outline: none; border-color: var(--teal); box-shadow: 0 0 0 3px rgba(47,183,143,.18);
+}
+input::placeholder, textarea::placeholder, .field-input::placeholder, .editor-input::placeholder { color: var(--muted) !important; opacity: 1; }
+select option { background: var(--surface); color: var(--text); }
+input:disabled, textarea:disabled, select:disabled { opacity: .55; cursor: not-allowed; }
+input[type="checkbox"], input[type="radio"] { accent-color: var(--teal); width: 16px; height: 16px; }
+.form-error { color: #ffb1a8 !important; background: rgba(229,104,92,.16) !important; }
+
+/* ---------- Jadual diseragamkan ---------- */
+table { border-collapse: collapse; width: 100%; }
+th, td { border-color: var(--line) !important; }
+table thead th, table th { background: var(--surface-2) !important; color: var(--ink) !important; font-weight: 700; }
+table tbody tr:hover td { background: rgba(232,237,243,.045); }
+
+/* ---------- Scrollbar lebih kemas ---------- */
+* { scrollbar-width: thin; scrollbar-color: var(--surface-3) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 7px; border: 2px solid transparent; background-clip: padding-box; }
+*::-webkit-scrollbar-thumb:hover { background: #2d3742; }
+*::-webkit-scrollbar-track { background: transparent; }
+
+/* ---------- Status pill ber-tema gelap (kontras tinggi) ---------- */
+.status-pill { border-radius: 999px; padding: 2px 11px; font-size: .72rem; font-weight: 700; border: 1px solid var(--line-strong); background: var(--surface-3); color: var(--text); }
+.status-pill--draft { background: rgba(150,162,175,.16); color: #ccd4dd; border-color: rgba(150,162,175,.34); }
+.status-pill--text_ready { background: rgba(47,183,143,.16); color: #7fe7c7; border-color: rgba(47,183,143,.4); }
+.status-pill--character_ready { background: rgba(139,124,246,.18); color: #c5baff; border-color: rgba(139,124,246,.4); }
+.status-pill--storyboard_ready { background: rgba(86,141,232,.18); color: #aac6ff; border-color: rgba(86,141,232,.4); }
+.status-pill--script_ready { background: rgba(226,182,89,.18); color: #f0d28e; border-color: rgba(226,182,89,.42); }
+.status-pill--panel_ready { background: rgba(232,104,160,.18); color: #f6aacd; border-color: rgba(232,104,160,.4); }
+.status-pill--image_prompt_ready { background: rgba(47,166,186,.18); color: #8fd9e3; border-color: rgba(47,166,186,.4); }
+.status-pill--image_generated { background: rgba(52,199,123,.18); color: #9bf0c2; border-color: rgba(52,199,123,.42); }
+.status-pill--published { background: rgba(226,182,89,.22); color: #f4e0a0; border-color: rgba(226,182,89,.5); }
+
+/* ---------- Override khusus tema gelap ---------- */
+/* badge neutral kelabu krim → chip gelap */
+.badge--background_character, .badge--face-normal, .badge--status-draft { background: var(--surface-3) !important; color: var(--text-soft) !important; border-color: var(--line-strong); }
+/* filter Review aktif (dahulu guna --ink sebagai latar) */
+.rv-filter.is-active { background: var(--teal) !important; color: #042018 !important; border-color: var(--teal) !important; }
+/* pautan kembali umum */
+.back-link { color: var(--text-soft); }
+.back-link:hover { color: var(--teal); }
+
+/* ---------- RESPONSIVE ---------- */
+/* Tablet: rel ikon automatik */
+@media (max-width: 1024px) {
+  .dash-side { flex-basis: 70px; width: 70px; }
+  .dash-nav-label, .dash-brand-text { display: none; }
+  .dash-nav .tab { justify-content: center; padding: 10px 0; gap: 0; }
+  .dash-side-top { justify-content: center; }
+  .dash-collapse { display: none; }
+  .dash-side-foot .back-link { font-size: 0; gap: 0; justify-content: center; }
+  .dash-side-foot .back-link::before { content: "←"; font-size: 1.1rem; }
+}
+/* Mobile: sidebar jadi bar mendatar di atas, content di bawah */
+@media (max-width: 640px) {
+  .dash { flex-direction: column; }
+  .dash-side {
+    position: sticky; top: 0; z-index: 15;
+    flex-basis: auto; width: 100%; height: auto;
+    flex-direction: row; align-items: center; gap: 4px;
+    padding: 8px 10px; border-right: none; border-bottom: 1px solid var(--line);
+    overflow-x: auto; overflow-y: hidden;
+  }
+  .dash-side-top { display: none; }
+  .dash-nav { flex-direction: row; gap: 4px; overflow-x: auto; overflow-y: hidden; flex: 1; }
+  .dash-nav .tab { flex: 0 0 auto; justify-content: center; padding: 8px 9px; gap: 0; }
+  .dash-nav-label { display: none; }
+  .dash-side-foot { display: none; }
+  .dash-main { padding: 12px 12px 40px; }
+  .dash-header .detail-title { font-size: 1.25rem; }
+  .detail-progress-bar { width: 110px; }
+}
+
+/* =========================================================================
+   FASA 17B — LAYOUT WIDTH FIX (desktop/laptop)
+   Hanya layout/lebar. Tiada perubahan warna/fungsi/logik.
+   ========================================================================= */
+
+/* ---- Kad senarai → grid responsive auto-fit (semua saiz; 1 lajur pada skrin kecil) ---- */
+.panel-list, .char-list, .scene-list, .rv-cards, .im-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 12px;
+  align-items: start;
+}
+/* kad berat-teks (skrip/visual/prompt) → lajur lebih lebar supaya mudah dibaca */
+.script-list, .visual-list, .prompt-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr));
+  gap: 12px;
+  align-items: start;
+}
+/* elemen penuh-lebar di dalam grid */
+.im-cards > .im-scene-h { grid-column: 1 / -1; margin-top: 14px; }
+.rv-cards > .rv-muted { grid-column: 1 / -1; }
+
+/* ---- Desktop / laptop: shell penuh lebar, buang had 640px yang memusatkan content ---- */
+@media (min-width: 641px) {
+  /* Bekas utama jadi penuh lebar (full-bleed) supaya sidebar rapat kiri & content guna semua ruang */
+  .view { max-width: none; margin: 0; padding: 0; }
+
+  /* Halaman utama (senarai projek) kekal kemas, berpusat, + grid kad */
+  .view > .page-head { max-width: 1320px; margin: 0 auto; padding: 24px 28px 0; }
+  .view > .list {
+    max-width: 1320px; margin: 0 auto; padding: 16px 28px 56px;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px;
+  }
+  /* keadaan ralat workspace (back-link + mesej) kekal berpadding */
+  .view > .back-link, .view > .error-text { display: inline-block; margin: 16px 0 0 24px; }
+
+  /* Teks: textarea besar & guna lebar penuh kanan */
+  .editor textarea, textarea.editor-input, textarea.field-input { min-height: 150px; }
+}
+
+/* ---- Skrin lebar: had selesa untuk content teks (grid tetap guna penuh) ---- */
+@media (min-width: 1700px) {
+  .editor { max-width: 1500px; }
+  .pv-reader { max-width: 1600px; }
 }

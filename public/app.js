@@ -323,6 +323,26 @@ const STATUS_LABELS = {
   published: 'Diterbitkan'
 };
 
+// Fasa 17 — ikon SVG sidebar (UI sahaja). Disuntik melalui innerHTML span.
+const STATUS_ORDER = ['draft', 'text_ready', 'character_ready', 'storyboard_ready', 'script_ready', 'panel_ready', 'image_prompt_ready', 'image_generated', 'published'];
+const SVG_ATTR = 'xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"';
+const NAV_ICONS = {
+  'Teks': '<svg ' + SVG_ATTR + '><path d="M6 3h9l5 5v13H6z"/><path d="M14 3v6h6"/><path d="M9 13h7M9 17h5"/></svg>',
+  'Watak': '<svg ' + SVG_ATTR + '><circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/></svg>',
+  'Babak': '<svg ' + SVG_ATTR + '><rect x="3" y="7" width="18" height="13" rx="1.5"/><path d="M3 7l3-3 4 3M9 7l3-3 4 3M15 7l3-3 3 3"/></svg>',
+  'Panel': '<svg ' + SVG_ATTR + '><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
+  'Script': '<svg ' + SVG_ATTR + '><path d="M21 12a8 8 0 0 1-8 8H7l-4 3v-3a8 8 0 1 1 18-8z"/><path d="M8 11h8M8 14h5"/></svg>',
+  'Visual': '<svg ' + SVG_ATTR + '><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.7"/><path d="M21 16l-5-5L5 21"/></svg>',
+  'Prompt': '<svg ' + SVG_ATTR + '><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M13 15h4"/></svg>',
+  'Review': '<svg ' + SVG_ATTR + '><circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/></svg>',
+  'Image': '<svg ' + SVG_ATTR + '><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-4.5-4.5L7 21"/></svg>',
+  'Production': '<svg ' + SVG_ATTR + '><circle cx="12" cy="12" r="3.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>',
+  'Preview': '<svg ' + SVG_ATTR + '><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>',
+  'Export': '<svg ' + SVG_ATTR + '><path d="M12 3v12M8 11l4 4 4-4"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>'
+};
+const BRAND_ICON = '<svg ' + SVG_ATTR + '><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 3v18M14 7h3M14 11h3"/></svg>';
+const COLLAPSE_ICON = '<svg ' + SVG_ATTR + '><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>';
+
 function statusLabel(s) {
   return STATUS_LABELS[s] || s || '—';
 }
@@ -711,20 +731,33 @@ async function renderDetail(id) {
   }
 
   view.innerHTML = '';
-  view.appendChild(el('a', { class: 'back-link', href: '#/', text: '← Semua projek' }));
+
+  const backLink = el('a', { class: 'back-link', href: '#/', text: '← Semua projek' });
 
   const statusWrap = el('span', { class: 'detail-status' }, statusPill(project.status));
+  const progressWrap = el('div', { class: 'detail-progress' });
+  function renderProgress(s) {
+    const idx = STATUS_ORDER.indexOf(s);
+    const pct = idx >= 0 ? Math.round((idx / (STATUS_ORDER.length - 1)) * 100) : 0;
+    progressWrap.innerHTML = '';
+    const fill = el('div', { class: 'detail-progress-fill' });
+    fill.style.width = pct + '%';
+    progressWrap.appendChild(el('div', { class: 'detail-progress-bar' }, [fill]));
+    progressWrap.appendChild(el('span', { class: 'detail-progress-pct', text: pct + '%' }));
+  }
   function updateStatus(s) {
     statusWrap.innerHTML = '';
     statusWrap.appendChild(statusPill(s));
+    renderProgress(s);
   }
+  renderProgress(project.status);
 
-  view.appendChild(el('div', { class: 'detail-head' }, [
+  const dashHeader = el('header', { class: 'dash-header' }, [
     el('div', { class: 'detail-head-row' }, [
       el('div', { class: 'detail-titles' }, [
         el('h1', { class: 'detail-title', text: projectTitle(project) }),
         project.title_ar ? el('p', { class: 'detail-ar', lang: 'ar', dir: 'rtl', text: project.title_ar }) : null,
-        statusWrap
+        el('div', { class: 'detail-meta' }, [statusWrap, progressWrap])
       ]),
       el('div', { class: 'detail-actions' }, [
         el('button', { class: 'btn btn-ghost btn-sm', type: 'button', onClick: function () { openProjectForm(project); }, text: 'Edit' }),
@@ -732,7 +765,7 @@ async function renderDetail(id) {
       ])
     ]),
     project.description ? el('p', { class: 'detail-desc', text: project.description }) : null
-  ]));
+  ]);
 
   // Tab bar: TEKS | WATAK | BABAK | PANEL | SCRIPT | VISUAL | PROMPT | REVIEW
   const tabTeks = el('button', { class: 'tab is-active', type: 'button', text: 'Teks' });
@@ -816,8 +849,37 @@ async function renderDetail(id) {
   tabPreview.addEventListener('click', function () { setTab('preview'); });
   tabExport.addEventListener('click', function () { setTab('export'); });
 
-  view.appendChild(el('div', { class: 'tabs' }, [tabTeks, tabWatak, tabBabak, tabPanel, tabScript, tabVisual, tabPrompt, tabReview, tabImage, tabProduction, tabPreview, tabExport]));
-  view.appendChild(content);
+  // Fasa 17 — susun tab sebagai item sidebar (ikon + label). Handler & logik kekal sama.
+  const NAV = [tabTeks, tabWatak, tabBabak, tabPanel, tabScript, tabVisual, tabPrompt, tabReview, tabImage, tabProduction, tabPreview, tabExport];
+  NAV.forEach(function (btn) {
+    const label = btn.textContent;
+    btn.textContent = '';
+    const ico = document.createElement('span');
+    ico.className = 'dash-nav-ico';
+    ico.innerHTML = NAV_ICONS[label] || '';
+    btn.appendChild(ico);
+    btn.appendChild(el('span', { class: 'dash-nav-label', text: label }));
+    btn.setAttribute('title', label);
+  });
+  const navEl = el('nav', { class: 'dash-nav' }, NAV);
+
+  const shell = el('div', { class: 'dash' });
+  const collapseBtn = el('button', { class: 'dash-collapse', type: 'button', title: 'Lipat / buka sidebar' });
+  collapseBtn.innerHTML = COLLAPSE_ICON;
+  collapseBtn.addEventListener('click', function () { shell.classList.toggle('dash--collapsed'); });
+
+  const brandMark = document.createElement('span');
+  brandMark.className = 'dash-brand-mark';
+  brandMark.innerHTML = BRAND_ICON;
+  const sideTop = el('div', { class: 'dash-side-top' }, [
+    el('div', { class: 'dash-brand' }, [brandMark, el('span', { class: 'dash-brand-text', text: 'Webtoon' })]),
+    collapseBtn
+  ]);
+  const sidebar = el('aside', { class: 'dash-side' }, [sideTop, navEl, el('div', { class: 'dash-side-foot' }, [backLink])]);
+  const main = el('div', { class: 'dash-main' }, [dashHeader, content]);
+  shell.appendChild(sidebar);
+  shell.appendChild(main);
+  view.appendChild(shell);
   setTab('teks');
 }
 
@@ -1644,10 +1706,11 @@ async function renderVisualTab(id, container, updateStatus) {
       ])
     ]));
 
+    const vlist = el('div', { class: 'visual-list' });
     sps.forEach(function (p) {
       const v = visualByPanel[String(p.id)];
       if (v) {
-        container.appendChild(visualCard(p, v, updateStatus, reload));
+        vlist.appendChild(visualCard(p, v, updateStatus, reload));
       } else {
         const gb = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', text: 'Jana visual' });
         gb.addEventListener('click', async function () {
@@ -1659,13 +1722,14 @@ async function renderVisualTab(id, container, updateStatus) {
             reload();
           } catch (err) { gb.disabled = false; gb.textContent = 'Jana visual'; toast(err.message, 'error'); }
         });
-        container.appendChild(el('div', { class: 'visual-missing' }, [
+        vlist.appendChild(el('div', { class: 'visual-missing' }, [
           el('span', { class: 'panel-no', text: 'Panel ' + p.panel_no }),
           el('span', { class: 'muted', text: 'belum ada visual' }),
           gb
         ]));
       }
     });
+    container.appendChild(vlist);
   });
 }
 
@@ -1911,10 +1975,11 @@ async function renderPromptTab(id, container, updateStatus) {
       ])
     ]));
 
+    const plist = el('div', { class: 'prompt-list' });
     sps.forEach(function (p) {
       const pr = promptByPanel[String(p.id)];
       if (pr) {
-        container.appendChild(promptCard(p, pr, updateStatus, reload));
+        plist.appendChild(promptCard(p, pr, updateStatus, reload));
       } else {
         const gb = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', text: 'Jana prompt' });
         gb.addEventListener('click', async function () {
@@ -1926,13 +1991,14 @@ async function renderPromptTab(id, container, updateStatus) {
             reload();
           } catch (err) { gb.disabled = false; gb.textContent = 'Jana prompt'; toast(err.message, 'error'); }
         });
-        container.appendChild(el('div', { class: 'visual-missing' }, [
+        plist.appendChild(el('div', { class: 'visual-missing' }, [
           el('span', { class: 'panel-no', text: 'Panel ' + p.panel_no }),
           el('span', { class: 'muted', text: 'belum ada prompt' }),
           gb
         ]));
       }
     });
+    container.appendChild(plist);
   });
 }
 
