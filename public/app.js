@@ -3599,6 +3599,10 @@ async function renderPreviewTab(id, container, updateStatus) {
       el('span', { class: 'pr-muted', text: summary.chapters + ' bab · ' + summary.panels + ' panel · ' + summary.with_image + ' berimej' })
     ])
   ]);
+  container.appendChild(el('div', { class: 'pv-brandbar' }, [
+    el('span', { class: 'pv-brand-name', text: 'Webtoon Mutalaah' }),
+    el('span', { class: 'pv-brand-by', text: 'by ByZaifuan' })
+  ]));
   container.appendChild(toolbar);
 
   if (!chapters.length || summary.panels === 0) {
@@ -3650,7 +3654,9 @@ async function renderPreviewTab(id, container, updateStatus) {
       if (p.image && p.image.url) {
         imgWrap.appendChild(el('img', { class: 'pv-img', src: p.image.url, alt: 'Panel ' + p.panel_no, loading: 'lazy' }));
       } else {
-        imgWrap.appendChild(el('div', { class: 'pv-noimg', text: 'No Image' }));
+        const ph = el('div', { class: 'pv-noimg' });
+        ph.innerHTML = '<span class="pv-noimg-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg></span><span class="pv-noimg-t">No Image</span><span class="pv-noimg-s">Jana imej untuk pratonton panel ini</span>';
+        imgWrap.appendChild(ph);
       }
       card.appendChild(imgWrap);
 

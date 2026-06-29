@@ -2042,3 +2042,97 @@ table tbody tr:hover td { background: rgba(232,237,243,.045); }
   *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
   .card:hover, .ex-type:hover, .panel-card:hover, .char-card:hover, .scene-card:hover, .script-card:hover, .visual-card:hover, .prompt-card:hover, .rv-card:hover, .im-card:hover { transform: none; }
 }
+
+/* =========================================================================
+   FASA 19 — VISUAL POLISH (Preview webtoon reader)
+   ========================================================================= */
+
+/* Brand bar kecil */
+.pv-brandbar { display: flex; align-items: baseline; gap: 8px; padding: 2px 4px 8px; }
+.pv-brand-name { font-family: var(--display); font-weight: 800; letter-spacing: .02em; color: var(--gold); font-size: .96rem; }
+.pv-brand-by { font-size: .72rem; color: var(--muted); }
+
+/* Chapter heading — lebih seperti webtoon, dengan ikon */
+.pv-chapter-head {
+  background: linear-gradient(100deg, var(--teal-deep, #1f6f67), var(--teal));
+  border: 1px solid var(--line-strong); box-shadow: var(--shadow-sm, 0 4px 14px rgba(0,0,0,.25));
+  align-items: center; gap: 10px; padding: 11px 14px;
+}
+.pv-chapter-head::before {
+  content: ""; flex: 0 0 18px; width: 18px; height: 18px; background: #fff;
+  -webkit-mask: center/18px no-repeat url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>');
+  mask: center/18px no-repeat url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>');
+}
+
+/* Panel — kad webtoon */
+.pv-panel {
+  border: 1px solid var(--line-strong); border-radius: 14px;
+  box-shadow: 0 6px 20px rgba(0,0,0,.22); background: var(--surface-2);
+}
+.pv-img-wrap { background: #0c0e11; border-bottom: 1px solid var(--line-strong); }
+.pv-img { border-radius: 0; }
+
+/* Placeholder No-Image */
+.pv-noimg {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  padding: 42px 16px; margin: 12px; border: 1.5px dashed var(--line-strong); border-radius: 12px;
+  background: repeating-linear-gradient(45deg, rgba(255,255,255,.012) 0 10px, transparent 10px 20px);
+  color: var(--muted); letter-spacing: 0; font-weight: 400;
+}
+.pv-noimg-ico { color: var(--teal); opacity: .85; }
+.pv-noimg-ico svg { width: 40px; height: 40px; display: block; }
+.pv-noimg-t { font-family: var(--display); font-weight: 700; letter-spacing: .06em; color: var(--text-soft); font-size: .95rem; }
+.pv-noimg-s { font-size: .76rem; color: var(--muted); }
+
+/* Meta pills */
+.pv-metas { padding: 9px 12px; gap: 6px; }
+.pv-meta { background: var(--surface-3); }
+
+/* Caption — teks kecil */
+.pv-caption { padding: 9px 12px 4px; font-size: .85rem; color: var(--text-soft); }
+.pv-caption .pv-tag { color: var(--gold); border-color: var(--gold); }
+
+/* Dialogue — bubble + nama speaker jelas */
+.pv-dialogue { padding: 8px 12px; gap: 9px; }
+.pv-dialogue .pv-line { flex-direction: column; align-items: stretch; gap: 3px; }
+.pv-dialogue .pv-speaker {
+  font-size: .76rem; color: var(--teal); display: inline-flex; align-items: center; gap: 5px;
+}
+.pv-dialogue .pv-speaker::before {
+  content: ""; width: 13px; height: 13px; background: currentColor;
+  -webkit-mask: center/13px no-repeat url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="black"><path d="M21 6h-2v9H6v2a1 1 0 0 0 1 1h11l4 4V7a1 1 0 0 0-1-1z"/><path d="M17 2H3a1 1 0 0 0-1 1v14l4-4h11a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1z"/></svg>');
+  mask: center/13px no-repeat url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="black"><path d="M21 6h-2v9H6v2a1 1 0 0 0 1 1h11l4 4V7a1 1 0 0 0-1-1z"/><path d="M17 2H3a1 1 0 0 0-1 1v14l4-4h11a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1z"/></svg>');
+}
+.pv-dialogue .pv-line-text {
+  background: var(--surface-3); border: 1px solid var(--line); border-radius: 13px; border-top-left-radius: 4px;
+  padding: 8px 12px; font-size: .9rem; line-height: 1.5;
+}
+.pv-dialogue .pv-ar { color: var(--gold); margin-top: 3px; }
+
+/* Narration — kotak naratif dengan aksen */
+.pv-narration {
+  padding: 10px 12px; margin: 6px 12px 10px; border-radius: 10px;
+  border-left: 3px solid var(--gold); background: rgba(226,182,89,.06); font-style: italic;
+}
+.pv-narration .pv-line { align-items: baseline; }
+.pv-narration .pv-tag { color: var(--gold); border-color: rgba(226,182,89,.5); }
+.pv-narration .pv-line-text { font-size: .88rem; line-height: 1.55; }
+
+/* Prompt (bila ditogol) */
+.pv-prompt { border-top: 1px dashed var(--line-strong); }
+
+/* Readability: spacing reader */
+.pv-chapter { margin-bottom: 26px; }
+.pv-panel { margin-bottom: 18px; }
+
+/* Mod Dark (togol) — selaras polish */
+.pv-dark .pv-panel { background: #1c1f24; }
+.pv-dark .pv-dialogue .pv-line-text { background: #23272d; border-color: #2c3036; }
+.pv-dark .pv-meta { background: #23272d; }
+.pv-dark .pv-narration { background: rgba(226,182,89,.08); }
+
+/* Mobile */
+@media (max-width: 640px) {
+  .pv-noimg { padding: 30px 12px; }
+  .pv-chapter-head { padding: 9px 11px; }
+}
