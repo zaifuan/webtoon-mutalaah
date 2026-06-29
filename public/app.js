@@ -497,19 +497,48 @@ function formatDate(iso) {
 
 // ---- Toast ----------------------------------------------------------------
 let toastTimer = null;
+const TOAST_ICONS = {
+  success: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+  error: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+  warning: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>',
+  info: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>'
+};
 function toast(message, kind) {
-  const t = byId('toast');
-  if (!t) return;
-  t.textContent = message;
-  t.className = 'toast toast--' + (kind || 'info');
-  t.hidden = false;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(function () {
-    t.hidden = true;
-  }, 3200);
+  const stack = byId('toast');
+  if (!stack) return;
+  const type = kind === 'ok' ? 'success' : (kind === 'err' ? 'error' : (kind || 'info'));
+  if (stack.className !== 'toast-stack') stack.className = 'toast-stack';
+  stack.hidden = false;
+
+  const item = el('div', { class: 'toast-item toast-item--' + type });
+  item.setAttribute('role', (type === 'error' || type === 'warning') ? 'alert' : 'status');
+  const ico = document.createElement('span');
+  ico.className = 'toast-ico'; ico.setAttribute('aria-hidden', 'true');
+  ico.innerHTML = TOAST_ICONS[type] || TOAST_ICONS.info;
+  const closeBtn = el('button', { class: 'toast-close', type: 'button' });
+  closeBtn.setAttribute('aria-label', 'Tutup notifikasi');
+  closeBtn.innerHTML = '&times;';
+
+  let removed = false;
+  function remove() {
+    if (removed) return; removed = true;
+    item.classList.add('toast-item--out');
+    setTimeout(function () {
+      if (item.parentNode) item.parentNode.removeChild(item);
+      if (!stack.children.length) stack.hidden = true;
+    }, 220);
+  }
+  closeBtn.addEventListener('click', remove);
+  item.appendChild(ico);
+  item.appendChild(el('span', { class: 'toast-msg', text: message }));
+  item.appendChild(closeBtn);
+  stack.appendChild(item);
+  while (stack.children.length > 4) stack.removeChild(stack.firstChild);
+  setTimeout(remove, type === 'error' ? 6000 : 4000);
 }
 
 // ---- Modal ----------------------------------------------------------------
+let modalCloseCb = null;
 function openModal(card) {
   const root = byId('modal-root');
   root.innerHTML = '';
@@ -519,6 +548,12 @@ function openModal(card) {
       if (e.target === overlay) closeModal();
     }
   }, card);
+  overlay.addEventListener('keydown', function (e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      const submit = card.querySelector('button[type="submit"], .modal-form .btn-primary, .modal-actions .btn-primary');
+      if (submit) { e.preventDefault(); submit.click(); }
+    }
+  });
   root.appendChild(overlay);
   root.hidden = false;
   document.body.classList.add('no-scroll');
@@ -528,14 +563,88 @@ function openModal(card) {
 
 function closeModal() {
   const root = byId('modal-root');
+  if (root.hidden) return;
   root.hidden = true;
   root.innerHTML = '';
   document.body.classList.remove('no-scroll');
+  const cb = modalCloseCb; modalCloseCb = null;
+  if (cb) cb();
 }
 
 document.addEventListener('keydown', function (e) {
   if (e.key === 'Escape') closeModal();
 });
+
+// Dialog pengesahan tersuai (ganti window.confirm). Pulangkan Promise<bool>.
+function confirmDialog(opts) {
+  opts = opts || {};
+  return new Promise(function (resolve) {
+    let settled = false;
+    function done(v) { if (settled) return; settled = true; modalCloseCb = null; resolve(v); }
+    const cancelBtn = el('button', { class: 'btn btn-ghost', type: 'button', text: opts.cancelText || 'Batal' });
+    cancelBtn.addEventListener('click', function () { done(false); closeModal(); });
+    const okBtn = el('button', { class: 'btn ' + (opts.danger ? 'btn-danger' : 'btn-primary'), type: 'button', text: opts.confirmText || 'Sahkan' });
+    okBtn.addEventListener('click', function () { done(true); closeModal(); });
+    const card = el('div', { class: 'modal-card confirm-card' + (opts.danger ? ' confirm-card--danger' : '') }, [
+      el('div', { class: 'modal-title', text: opts.title || 'Sahkan tindakan' }),
+      el('p', { class: 'modal-text', text: opts.message || 'Adakah anda pasti?' }),
+      el('div', { class: 'modal-actions' }, [cancelBtn, okBtn])
+    ]);
+    card.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); done(true); closeModal(); }
+    });
+    modalCloseCb = function () { done(false); };
+    openModal(card);
+    okBtn.focus();
+  });
+}
+
+// Maklum balas "Disalin" pada butang copy.
+function flashCopied(btn, original) {
+  if (!btn) return;
+  const o = original != null ? original : btn.textContent;
+  btn.classList.add('is-copied');
+  btn.textContent = 'Disalin ✓';
+  setTimeout(function () { btn.classList.remove('is-copied'); btn.textContent = o; }, 1300);
+}
+
+// Keadaan loading butang: spinner + disabled + teks pilihan (elak tekan berganda).
+function setBtnLoading(btn, on, loadingText) {
+  if (!btn) return;
+  if (on) {
+    if (btn.getAttribute('data-normal-text') === null) btn.setAttribute('data-normal-text', btn.textContent);
+    btn.classList.add('is-loading');
+    btn.disabled = true;
+    if (loadingText) btn.textContent = loadingText;
+  } else {
+    btn.classList.remove('is-loading');
+    btn.disabled = false;
+    const n = btn.getAttribute('data-normal-text');
+    if (n !== null) { btn.textContent = n; btn.removeAttribute('data-normal-text'); }
+  }
+}
+
+// Drag & drop fail imej ke zon (guna semula handler 'change' input fail sedia ada).
+function enableDrop(zone, fileInput) {
+  if (!zone || !fileInput) return;
+  ['dragenter', 'dragover'].forEach(function (ev) {
+    zone.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); zone.classList.add('is-dragover'); });
+  });
+  ['dragleave', 'dragend'].forEach(function (ev) {
+    zone.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); zone.classList.remove('is-dragover'); });
+  });
+  zone.addEventListener('drop', function (e) {
+    e.preventDefault(); e.stopPropagation(); zone.classList.remove('is-dragover');
+    const files = e.dataTransfer && e.dataTransfer.files;
+    if (!files || !files.length) return;
+    try {
+      const dt = new DataTransfer();
+      dt.items.add(files[0]);
+      fileInput.files = dt.files;
+      fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    } catch (err) { /* DataTransfer tak disokong — abai dengan selamat */ }
+  });
+}
 
 // ---- Borang cipta / edit projek -------------------------------------------
 function openProjectForm(existing) {
@@ -2011,13 +2120,13 @@ function promptCard(panel, pr, updateStatus, reload) {
   const copyBtn = el('button', { class: 'btn btn-primary btn-sm', type: 'button', text: 'Copy Prompt' });
   copyBtn.addEventListener('click', async function () {
     const ok = await copyText(pr.prompt_text || '');
-    if (ok) { toast('Prompt disalin', 'ok'); }
+    if (ok) { flashCopied(copyBtn, 'Copy Prompt'); }
     else { ptArea.focus(); ptArea.select(); toast('Tekan & tahan untuk salin', 'error'); }
   });
   const copyNegBtn = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', text: 'Copy Negative' });
   copyNegBtn.addEventListener('click', async function () {
     const ok = await copyText(pr.negative_prompt || '');
-    if (ok) { toast('Negative disalin', 'ok'); }
+    if (ok) { flashCopied(copyNegBtn, 'Copy Negative'); }
     else { negArea.focus(); negArea.select(); toast('Tekan & tahan untuk salin', 'error'); }
   });
 
@@ -2582,11 +2691,11 @@ function reviewCard(item) {
     ]);
     const copyP = el('button', { class: 'btn btn-primary btn-sm', type: 'button', text: 'Copy Prompt' });
     copyP.addEventListener('click', async function () {
-      const ok = await copyText(pr.prompt_text || ''); if (ok) toast('Prompt disalin', 'ok'); else { ptArea.focus(); ptArea.select(); }
+      const ok = await copyText(pr.prompt_text || ''); if (ok) flashCopied(copyP, 'Copy Prompt'); else { ptArea.focus(); ptArea.select(); }
     });
     const copyN = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', text: 'Copy Negative' });
     copyN.addEventListener('click', async function () {
-      const ok = await copyText(pr.negative_prompt || ''); if (ok) toast('Negative disalin', 'ok'); else { negArea.focus(); negArea.select(); }
+      const ok = await copyText(pr.negative_prompt || ''); if (ok) flashCopied(copyN, 'Copy Negative'); else { negArea.focus(); negArea.select(); }
     });
     actions.push(copyP, copyN);
   } else {
@@ -2765,13 +2874,13 @@ function imageCard(item, id, refresh, updateStatus) {
     const f = fileInput.files && fileInput.files[0];
     if (!f) return;
     if (f.size > 10 * 1024 * 1024) { toast('Saiz fail melebihi 10MB', 'error'); fileInput.value = ''; return; }
-    uploadBtn.disabled = true; const lbl = uploadBtn.textContent; uploadBtn.textContent = 'Memuat naik…';
+    setBtnLoading(uploadBtn, true, 'Memuat naik…');
     try {
       await api.uploadPanelImage(item.panel_id, f);
       toast('Gambar dimuat naik', 'ok');
       if (updateStatus) updateStatus();
       refresh();
-    } catch (e) { toast('Gagal: ' + e.message, 'error'); uploadBtn.disabled = false; uploadBtn.textContent = lbl; fileInput.value = ''; }
+    } catch (e) { toast('Gagal: ' + e.message, 'error'); setBtnLoading(uploadBtn, false); fileInput.value = ''; }
   });
 
   const actions = [uploadBtn, fileInput];
@@ -2789,7 +2898,7 @@ function imageCard(item, id, refresh, updateStatus) {
     });
     const delBtn = el('button', { class: 'btn btn-danger btn-sm', type: 'button', text: 'Padam' });
     delBtn.addEventListener('click', async function () {
-      if (!window.confirm('Padam gambar panel ' + item.panel_no + '?')) return;
+      if (!(await confirmDialog({ title: 'Padam gambar', message: 'Padam gambar panel ' + item.panel_no + '? Tindakan ini tidak boleh diundur.', confirmText: 'Padam', danger: true }))) return;
       try { await api.deleteImage(img.id); toast('Gambar dipadam', 'ok'); if (updateStatus) updateStatus(); refresh(); }
       catch (e) { toast('Gagal: ' + e.message, 'error'); }
     });
@@ -2812,7 +2921,7 @@ function imageCard(item, id, refresh, updateStatus) {
     ? el('span', { class: 'im-prompt-ok', text: 'Prompt: ' + (item.prompt_status || 'ada') })
     : el('span', { class: 'im-prompt-no', text: 'Prompt: tiada' });
 
-  return el('div', { class: 'im-card' }, [
+  const imCardEl = el('div', { class: 'im-card' }, [
     el('div', { class: 'im-card-top' }, [
       el('span', { class: 'im-card-title', text: 'Babak ' + (item.scene_no || '–') + ' · Panel ' + item.panel_no }),
       statusBadge
@@ -2827,6 +2936,8 @@ function imageCard(item, id, refresh, updateStatus) {
     notesInput,
     el('div', { class: 'im-actions' }, actions)
   ]);
+  enableDrop(imCardEl, fileInput);
+  return imCardEl;
 }
 
 async function renderImageTab(id, container, updateStatus) {
@@ -2951,7 +3062,7 @@ function jobRow(job, reload, updateStatus) {
   }
   const delBtn = el('button', { class: 'btn btn-danger btn-sm', type: 'button', text: 'Padam' });
   delBtn.addEventListener('click', async function () {
-    if (!window.confirm('Padam job #' + job.id + '?')) return;
+    if (!(await confirmDialog({ title: 'Padam job', message: 'Padam job #' + job.id + ' daripada baris gilir?', confirmText: 'Padam', danger: true }))) return;
     try { await api.deleteJob(job.id); toast('Job dipadam', 'ok'); reload(); } catch (e) { toast('Gagal: ' + e.message, 'error'); }
   });
   actions.push(delBtn);
@@ -3070,7 +3181,7 @@ async function renderProductionTab(id, container, updateStatus) {
   purgeBtn.addEventListener('click', async function () {
     const done = jobs.filter(function (j) { return j.status === 'completed'; });
     if (!done.length) { toast('Tiada job selesai', 'ok'); return; }
-    if (!window.confirm('Padam ' + done.length + ' job yang selesai?')) return;
+    if (!(await confirmDialog({ title: 'Padam job selesai', message: 'Padam ' + done.length + ' job yang telah selesai?', confirmText: 'Padam semua', danger: true }))) return;
     try { for (const j of done) await api.deleteJob(j.id); toast('Dipadam', 'ok'); reload(); }
     catch (e) { toast('Gagal: ' + e.message, 'error'); }
   });
@@ -3118,6 +3229,7 @@ async function renderProductionTab(id, container, updateStatus) {
     });
     const cancelBtn = el('button', { class: 'btn btn-ghost', type: 'button', text: 'Cancel' });
     cancelBtn.addEventListener('click', async function () {
+      if (!(await confirmDialog({ title: 'Batalkan pipeline', message: 'Batalkan semua job yang belum selesai dalam pipeline ini?', confirmText: 'Batalkan', danger: true }))) return;
       cancelBtn.disabled = true;
       try { const out = await api.cancelProduction(id); toast('Dibatalkan: ' + (out.cancelled || 0) + ' job', 'ok'); reload(); }
       catch (e) { toast('Gagal: ' + e.message, 'error'); cancelBtn.disabled = false; }
@@ -3716,6 +3828,7 @@ async function renderExportTab(id, container, updateStatus) {
       dl.setAttribute('download', it.name); dl.setAttribute('target', '_blank');
       const del = el('button', { class: 'btn-ghost ex-del', type: 'button', text: 'Delete' });
       del.addEventListener('click', async function () {
+        if (!(await confirmDialog({ title: 'Padam fail export', message: 'Padam "' + it.name + '"?', confirmText: 'Padam', danger: true }))) return;
         del.disabled = true;
         try { await api.deleteExport(id, it.file); toast('Fail dipadam', 'success'); refreshHistory(); }
         catch (e) { del.disabled = false; toast('Gagal padam: ' + e.message, 'error'); }

@@ -1811,8 +1811,8 @@ select.field-input {
 .btn-success:hover:not(:disabled) { background: var(--ok); color: #042018; }
 .btn-outline { background: transparent; color: var(--teal); border-color: var(--teal); }
 .btn-outline:hover:not(:disabled) { background: rgba(47,183,143,.12); color: #d7f7ec; }
-.btn.is-loading { color: transparent !important; position: relative; pointer-events: none; }
-.btn.is-loading::after { content: ""; position: absolute; width: 14px; height: 14px; border: 2px solid var(--text); border-top-color: transparent; border-radius: 50%; animation: btnspin .6s linear infinite; }
+.btn.is-loading { pointer-events: none; opacity: .92; }
+.btn.is-loading::before { content: ""; width: 13px; height: 13px; flex: 0 0 13px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; display: inline-block; margin-right: 1px; animation: btnspin .6s linear infinite; vertical-align: -2px; }
 @keyframes btnspin { to { transform: rotate(360deg); } }
 
 /* ---------- Borang diseragamkan (kontras) ---------- */
@@ -1944,4 +1944,101 @@ table tbody tr:hover td { background: rgba(232,237,243,.045); }
 @media (min-width: 1700px) {
   .editor { max-width: 1500px; }
   .pv-reader { max-width: 1600px; }
+}
+
+/* =========================================================================
+   FASA 18 — UX POLISH (frontend sahaja)
+   ========================================================================= */
+
+/* ---------- Toast: stack + jenis + ikon + tutup ---------- */
+.toast-stack {
+  position: fixed; right: 16px; bottom: 16px; z-index: 90;
+  display: flex; flex-direction: column; gap: 10px;
+  max-width: min(92vw, 380px); pointer-events: none;
+}
+.toast-item {
+  pointer-events: auto; display: flex; align-items: flex-start; gap: 10px;
+  background: var(--surface-2); color: var(--text);
+  border: 1px solid var(--line-strong); border-left-width: 4px;
+  border-radius: 12px; padding: 11px 12px; box-shadow: var(--shadow);
+  animation: toastIn .26s cubic-bezier(.22,1,.36,1) both;
+}
+.toast-item--out { animation: toastOut .2s ease forwards; }
+.toast-ico { flex: 0 0 18px; width: 18px; height: 18px; margin-top: 1px; }
+.toast-ico svg { width: 18px; height: 18px; display: block; }
+.toast-msg { flex: 1; font-size: .86rem; line-height: 1.38; word-break: break-word; }
+.toast-close { flex: 0 0 auto; background: none; border: none; color: var(--muted); font-size: 1.15rem; line-height: 1; cursor: pointer; padding: 0 3px; border-radius: 6px; }
+.toast-close:hover { color: var(--text); }
+.toast-item--success { border-left-color: var(--ok); }
+.toast-item--success .toast-ico { color: var(--ok); }
+.toast-item--error { border-left-color: var(--danger); }
+.toast-item--error .toast-ico { color: #ff8b80; }
+.toast-item--warning { border-left-color: var(--gold); }
+.toast-item--warning .toast-ico { color: var(--gold); }
+.toast-item--info { border-left-color: var(--teal); }
+.toast-item--info .toast-ico { color: var(--teal); }
+@keyframes toastIn { from { opacity: 0; transform: translateX(26px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes toastOut { to { opacity: 0; transform: translateX(26px); } }
+@media (max-width: 640px) { .toast-stack { left: 12px; right: 12px; bottom: 12px; max-width: none; } }
+
+/* ---------- Confirm dialog ---------- */
+.confirm-card { max-width: 420px; }
+.confirm-card .modal-text { color: var(--text-soft); }
+.confirm-card--danger .modal-title { color: #ff9a90; }
+
+/* ---------- Empty state dipercantik + ikon ---------- */
+.empty {
+  text-align: center; padding: 34px 20px; margin: 8px 0;
+  border: 1px dashed var(--line-strong); border-radius: var(--radius);
+  background: linear-gradient(180deg, rgba(255,255,255,.015), transparent);
+}
+.empty::before {
+  content: ""; display: block; width: 46px; height: 46px; margin: 0 auto 12px;
+  border-radius: 14px; background: var(--surface-3);
+  -webkit-mask: center/24px no-repeat url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l2-3h14l2 3"/><path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7"/><path d="M3 7h18M9 12h6"/></svg>');
+  mask: center/24px no-repeat url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l2-3h14l2 3"/><path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7"/><path d="M3 7h18M9 12h6"/></svg>');
+  /* warna ikon */
+  background-color: var(--teal);
+}
+.empty-ar { font-family: var(--arabic); font-size: 1.2rem; color: var(--gold); margin-bottom: 6px; }
+.empty-title { font-family: var(--display); font-weight: 700; font-size: 1.05rem; color: var(--light); margin-bottom: 4px; }
+.empty-text { color: var(--text-soft); font-size: .9rem; max-width: 420px; margin: 0 auto; }
+
+/* ---------- Maklum balas copy ---------- */
+.btn.is-copied { background: var(--ok) !important; color: #042018 !important; border-color: var(--ok) !important; }
+
+/* ---------- Drag & drop imej ---------- */
+.im-card.is-dragover { outline: 2px dashed var(--teal); outline-offset: -4px; box-shadow: 0 0 0 4px rgba(47,183,143,.14); }
+.im-card.is-dragover::after { content: "Lepaskan imej di sini"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(13,17,23,.72); color: var(--teal); font-family: var(--display); font-weight: 700; border-radius: inherit; pointer-events: none; }
+.im-card { position: relative; }
+
+/* ---------- Form UX ---------- */
+.field-help { display: block; font-size: .76rem; color: var(--muted); margin-top: 5px; }
+.form-error { display: flex; align-items: center; gap: 7px; }
+:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.btn:focus-visible, .dash-nav .tab:focus-visible { outline-offset: 2px; }
+
+/* ---------- Micro-interaction ---------- */
+.card, .ex-type, .pv-panel, .panel-card, .char-card, .scene-card, .script-card, .visual-card, .prompt-card, .rv-card, .im-card {
+  transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+}
+.card:hover, .ex-type:hover, .panel-card:hover, .char-card:hover, .scene-card:hover, .script-card:hover, .visual-card:hover, .prompt-card:hover, .rv-card:hover, .im-card:hover {
+  transform: translateY(-2px); box-shadow: var(--shadow);
+}
+/* transition kandungan tab + modal */
+.tab-content > * { animation: fadeInUp .26s ease both; }
+.modal-overlay { animation: overlayIn .18s ease both; }
+.modal-card { animation: sheet-in 280ms cubic-bezier(0.22,1,0.36,1) both; }
+@keyframes fadeInUp { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } }
+@keyframes overlayIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* ---------- Skeleton shimmer (untuk kegunaan loading) ---------- */
+.skeleton { position: relative; overflow: hidden; background: var(--surface-2); border-radius: 8px; }
+.skeleton::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, rgba(232,237,243,.08), transparent); animation: shimmer 1.3s infinite; }
+@keyframes shimmer { 100% { transform: translateX(100%); } }
+
+/* ---------- Respect prefers-reduced-motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
+  .card:hover, .ex-type:hover, .panel-card:hover, .char-card:hover, .scene-card:hover, .script-card:hover, .visual-card:hover, .prompt-card:hover, .rv-card:hover, .im-card:hover { transform: none; }
 }
