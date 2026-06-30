@@ -27,6 +27,9 @@ const {
   NOBLE_PROMPT_LINE, NOBLE_NEGATIVE, BASE_NEGATIVE, styleDescription
 } = require('../config/promptStyle');
 const { ENUMS } = require('../config/visualDirector');
+// Fasa 21: helper konteks padat (DNA watak ringkas, continuity, brief Review).
+// Additive — dipanggil secara OPTIONAL; tidak mengubah kontrak buildMessages/parse.
+const ctx = require('./contextBuilder');
 
 // ---- Whitelist enum (selaras DB CHECK constraints) -------------------------
 const CHARACTER_TYPES = ['ordinary_character', 'noble_figure_no_face', 'background_character'];
@@ -93,6 +96,10 @@ const COMMON_RULES_AR =
   'أنت المخرج القصصي والمحرّر التربوي لإنتاج «ويبتون» تعليمي إسلامي مأخوذ من نص «المطالعة» العربي. ' +
   'اعمل بالعربية الفصحى الحديثة المناسبة للكتب التعليمية. لا تخترع أحداثًا أو أسماءً أو وقائع ليست في النص المصدر. ' +
   'التزم الأدب الإسلامي: الأنبياء والرسل وبعض الصحابة شخصيات مكرّمة لا يُظهَر وجهها (يُستبدل بنور لطيف). ' +
+  // Fasa 21: konsistensi & continuity.
+  'حافظ على اتساق الشخصيات: كل شخصية تحتفظ بسماتها البصرية الثابتة (DNA) ورمزها في كل ظهور، فلا يتغيّر مظهرها أو لباسها بين اللوحات. ' +
+  'حافظ على استمرارية المكان والزمان والمزاج بين المشاهد واللوحات المتتالية ما لم ينصّ المصدر على تغيّر. ' +
+  'اكتب بإيجاز ودقّة دون حشو، وتجنّب التكرار. ' +
   'أعِد JSON صالحًا فقط، بلا أي نص أو شرح أو علامات تنسيق خارج الـ JSON.';
 
 const SYS = {
@@ -100,7 +107,8 @@ const SYS = {
     COMMON_RULES_AR + '\n' +
     'مهمتك: استخرج كل الشخصيات من النص. لكل شخصية: رمز ثابت بالإنجليزية بصيغة NAME_001 ' +
     '(مثل MUSA_001, KHIDR_001, YUSHA_001) لا يتغيّر، واسم عربي، ودور موجز بالعربية، ونوع، وسياسة الوجه، ' +
-    'و"visual_dna" (وصف بصري ثابت للاتساق). ' +
+    'و"visual_dna" (وصف بصري ثابت للاتساق: gender, age, height, robe, turban, staff... إلخ). ' +
+    'هذا الـ DNA هو ما يضمن ظهور الشخصية بالشكل نفسه في كل لوحة، فاجعله دقيقًا ومستقرًا. ' +
     'النوع (character_type) أحدها فقط: ' + CHARACTER_TYPES.join(' | ') + '. ' +
     'الأنبياء/الرسل/الصحابة المكرّمون = noble_figure_no_face و face_policy = glowing_light. ' +
     'الناس العاديون = ordinary_character (face_policy=normal). الجماعات/الخلفية = background_character.\n' +
@@ -110,6 +118,7 @@ const SYS = {
     COMMON_RULES_AR + '\n' +
     'مهمتك: قسّم القصة إلى مشاهد مرتّبة منطقيًا حسب تسلسل النص. لكل مشهد: عنوان عربي، وملخّص عربي، ' +
     'وهدف تربوي/سردي، ومزاج، ومكان (بالعربية)، ونوع المشهد، والشخصيات الحاضرة (بالرموز الثابتة). ' +
+    'اجعل المشاهد متّسقة سرديًا: كل مشهد يبني على ما قبله، والمكان والزمن يتطوّران تدريجيًا. ' +
     'نوع المشهد (scene_type) أحدها: ' + SCENE_TYPES.join(' | ') + '. استخدم رموز الشخصيات المعطاة فقط.\n' +
     'أعِد: {"scenes":[{"scene_no":1,"title_ar":"","summary_ar":"","objective_ar":"","mood":"","location":"","scene_type":"","characters":["CODE"]}]}',
 
@@ -118,6 +127,7 @@ const SYS = {
     'مهمتك: حوّل المشهد إلى لوحات (panels) بصرية متسلسلة. أنت تقرّر عدد اللوحات المناسب (٢ إلى ٦) حسب الحدث، ' +
     'ونوع اللقطة، والتكوين، والحركة، والعاطفة، وتدفّق السرد. لكل لوحة: نوعها، ونوع اللقطة، ووصف بصري عربي، ' +
     'وكابتشن عربي مختصر، والشخصيات الحاضرة (بالرموز). لا تعتمد على قوالب «beat» جاهزة؛ قرّر بصريًا حسب النص. ' +
+    'احرص على استمرارية اللباس والسمات بين اللوحات (نفس الـ DNA للشخصية)، وعلى تسلسل مكاني منطقي داخل المشهد. ' +
     'نوع اللوحة (panel_type) أحدها: ' + PANEL_TYPES.join(' | ') + '. ' +
     'نوع اللقطة (shot_type) أحدها: ' + SHOT_TYPES.join(' | ') + '.\n' +
     'أعِد: {"panels":[{"panel_no":1,"panel_type":"","shot_type":"","composition":"","camera":"eye_level","visual_ar":"","caption_ar":"","emotion":"","characters":["CODE"]}]}',
@@ -127,6 +137,7 @@ const SYS = {
     'مهمتك: اكتب نص اللوحة كاملًا بالعربية الفصحى: حوار، وسرد، وكابتشن حسب الحاجة (قد يحتوي عنصرًا واحدًا أو أكثر). ' +
     'لكل عنصر: نوعه، والمتحدّث (بالرمز إن كان حوارًا)، والنص العربي، والعاطفة، ونوع الفقاعة. ' +
     'لا تستخدم نصوصًا مكتوبة مسبقًا، ولا اللغة الملايوية. النصوص القرآنية تُنقل بدقّة إن وُجدت في المصدر. ' +
+    'حافظ على نبرة كل شخصية وثابتة (لا يتغيّر أسلوب الكلام للشخصية نفسها بين اللوحات). ' +
     'نوع العنصر (script_type) أحدها: ' + SCRIPT_TYPES.join(' | ') + '. ' +
     'العاطفة (emotion) أحدها: ' + EMOTIONS.join(' | ') + '. نوع الفقاعة (bubble_type) أحدها: ' + BUBBLE_TYPES.join(' | ') + '.\n' +
     'أعِد: {"scripts":[{"script_type":"","speaker_code":"","text_ar":"","emotion":"","bubble_type":""}]}',
@@ -135,6 +146,7 @@ const SYS = {
     COMMON_RULES_AR + '\n' +
     'مهمتك (مدير التصوير): حدّد المعالجة البصرية للوحة لمساعدة محرّك الـ prompt. القيم من القوائم المسموحة فقط ' +
     '(بالإنجليزية كرموز تقنية، وليست لغة بشرية). أضف "visual_notes" موجزة بالعربية. ' +
+    'وازن بين اختياراتك وبين استمرارية المكان والمزاج الواردة من المشهد السابق حتى لا تتغيّر الإضاءة أو الطقس بلا سبب سردي. ' +
     'إذا حضرت شخصية مكرّمة فاجعل face_policy=glowing_light.\n' +
     'القيم المسموحة: shot=' + ENUMS.shot.join('/') + '؛ angle=' + ENUMS.angle.join('/') + '؛ lens=' + ENUMS.lens.join('/') +
     '؛ composition=' + ENUMS.composition.join('/') + '؛ camera_movement=' + ENUMS.camera_movement.join('/') +
@@ -146,13 +158,18 @@ const SYS = {
     'أعِد: {"visual":{"shot":"","angle":"","lens":"","composition":"","camera_movement":"","lighting":"","atmosphere":"","time_of_day":"","weather":"","color_palette":"","focus":"","depth":"","detail_level":"","visual_priority":"","face_policy":"","visual_notes":""}}',
 
   // PROMPT ENGINE: مُخرَج إنجليزي فقط (لِـ ComfyUI). لا عربية ولا ملايوية ولا رموز داخلية.
+  // Fasa 21: struktur profesional (subject → camera → lighting → style) + quality tags
+  // SDXL/Flux + vertical aspect + character consistency + noble-figure safety.
   prompt:
-    'You are the Image Prompt Director for an Islamic educational webtoon rendered by a Stable Diffusion model (SDXL/Flux via ComfyUI). ' +
+    'You are the Image Prompt Director for an Islamic educational webtoon rendered by a Stable Diffusion model (SDXL / Flux via ComfyUI). ' +
     'Produce ONE professional ENGLISH image prompt and an ENGLISH negative prompt for the given panel. ' +
-    'English ONLY — never include Arabic, Malay, internal character codes (e.g. MUSA_001), placeholders, or commentary. ' +
-    'Describe camera (shot/angle/lens), composition, lighting, atmosphere, environment, modest historical clothing, and respectful Islamic depiction. ' +
-    'For noble figures (prophets/righteous): the face MUST be fully replaced by soft glowing light — no eyes, nose, mouth, or facial features; reflect this in the negative prompt. ' +
-    'Do NOT invent characters or story facts beyond the provided context. Keep it concise, concrete, vertical webtoon panel.\n' +
+    'English ONLY — never include Arabic, Malay, internal character codes (e.g. MUSA_001), placeholders, or commentary in the prompt.\n' +
+    'STRUCTURE the positive prompt as a clear flow: [subject & action] → [camera: shot/angle/lens] → [composition] → [lighting & atmosphere] → [environment & weather] → [clothing: modest historical] → [style & quality]. ' +
+    'Lead with the concrete subject and what it is doing; keep it vertical webtoon framing (tall aspect, portrait orientation). ' +
+    'Apply the character DNA given in the context so the SAME character looks identical across panels (age, robe color, headwear, props). ' +
+    'For noble figures (prophets/righteous): the face MUST be fully replaced by soft glowing light — no eyes, nose, mouth, or facial features; reflect this in the negative prompt too.\n' +
+    'Append concise quality/render tags suited to SDXL/Flux (e.g. highly detailed, sharp focus, clean line art, cinematic lighting, professional illustration), but do NOT pad with redundant words or repeat instructions. ' +
+    'Do NOT invent characters or story facts beyond the provided context.\n' +
     'Reply with ONLY valid JSON: {"prompt_text":"","negative_prompt":""}',
 
   review:
@@ -165,6 +182,9 @@ const SYS = {
 
 // ===========================================================================
 // USER MESSAGE BUILDERS — konteks ringkas (Arab/JSON) untuk setiap engine.
+// Fasa 21: guna contextBuilder (DNA ringkas, continuity, brief) supaya setiap
+// Director menerima konteks padat & konsisten → kurang token + konsistensi watak
+// + continuity lokasi/masa. Bentuk JSON output (instruksi) TIDAK berubah.
 // ===========================================================================
 function userFor(engine, payload) {
   const p = payload || {};
@@ -173,7 +193,7 @@ function userFor(engine, payload) {
       return 'النص المصدر (عربي):\n' + s(p.text_ar) + '\n\nاستخرج كل الشخصيات بصيغة JSON المطلوبة.';
     case 'scene':
       return 'النص المصدر (عربي):\n' + s(p.text_ar) +
-        '\n\nالشخصيات المتاحة (استخدم رموزها): ' + jstr(charsBrief(p.characters)) +
+        '\n\nالشخصيات المتاحة (استخدم رموزها ولا تخترع رموزًا جديدة): ' + jstr(ctx.charsBrief(p.characters)) +
         '\n\nقسّم القصة إلى مشاهد بصيغة JSON المطلوبة.';
     case 'panel':
       return 'المشهد: ' + jstr({
@@ -181,18 +201,18 @@ function userFor(engine, payload) {
         summary_ar: p.scene && (p.scene.summary_ar || p.scene.summary_ms), mood: p.scene && p.scene.mood,
         location: p.scene && p.scene.location, scene_type: p.scene && p.scene.scene_type,
         characters: asArray(p.scene && p.scene.characters_json)
-      }) + '\n\nالشخصيات: ' + jstr(charsBrief(p.characters)) +
+      }) + '\nالشخصيات (DNA ثابت للحفاظ على الاتساق): ' + jstr(ctx.charsBrief(p.characters)) +
         '\n\nحوّل المشهد إلى لوحات بصيغة JSON المطلوبة.';
     case 'script':
       return 'المشهد: ' + jstr({ title: p.scene && (p.scene.title_ar || p.scene.title_ms), mood: p.scene && p.scene.mood, location: p.scene && p.scene.location }) +
         '\nاللوحة: ' + jstr({ panel_no: p.panel && p.panel.panel_no, panel_type: p.panel && p.panel.panel_type, visual: p.panel && (p.panel.visual_ar || p.panel.visual_ms), characters: asArray(p.panel && p.panel.characters_json) }) +
-        '\nالشخصيات: ' + jstr(charsBrief(p.characters)) +
+        '\nالشخصيات: ' + jstr(ctx.charsBrief(p.characters)) +
         '\n\nاكتب نص اللوحة بصيغة JSON المطلوبة.';
     case 'visual':
       return 'اللوحة: ' + jstr({ panel_type: p.panel && p.panel.panel_type, shot_type: p.panel && p.panel.shot_type, characters: asArray(p.panel && p.panel.characters_json) }) +
-        '\nالمشهد: ' + jstr({ location: p.scene && p.scene.location, mood: p.scene && p.scene.mood, scene_type: p.scene && p.scene.scene_type }) +
-        '\nالنص: ' + jstr({ narration: p.script && p.script.narration, dialogue: p.script && p.script.dialogue, emotion: p.script && p.script.emotion }) +
-        '\nالشخصيات: ' + jstr(charsBrief(p.characters)) +
+        '\nاستمرارية المكان/المزاج (حافظ عليها ما لم يتغيّر السرد): ' + jstr(ctx.continuityFrom(p.scene, p.panel)) +
+        '\nالنص: ' + jstr(ctx.scriptBrief(p.script)) +
+        '\nالشخصيات (DNA للحفاظ على الاتساق البصري): ' + jstr(ctx.charsPresent(p.characters, asArray(p.panel && p.panel.characters_json))) +
         '\n\nحدّد المعالجة البصرية بصيغة JSON المطلوبة.';
     case 'prompt':
       return 'Panel context (do not copy codes/Arabic into the prompt):\n' + jstr({
@@ -200,11 +220,18 @@ function userFor(engine, payload) {
         panel_type: p.panel && p.panel.panel_type, shot: p.visual && p.visual.shot, angle: p.visual && p.visual.angle,
         lens: p.visual && p.visual.lens, lighting: p.visual && p.visual.lighting, atmosphere: p.visual && p.visual.atmosphere,
         composition: p.visual && p.visual.composition, color_palette: p.visual && p.visual.color_palette,
-        characters: charsBrief(p.characters).map(function (c) { return { type: c.type, face_policy: c.face_policy, visual_dna: c.visual_dna }; }),
+        // DNA ringkas untuk konsistensi watak — tiada kod/komen di prompt akhir.
+        characters: ctx.charsPresent(p.characters, asArray(p.panel && p.panel.characters_json)).map(function (c) {
+          return { type: c.type, face_policy: c.face_policy, dna: c.dna };
+        }),
         emotion: p.script && p.script.emotion
       }) + '\n\nProduce the English image prompt JSON.';
     case 'review':
-      return 'اللوحة: ' + jstr(p.panel || {}) + '\nالنص: ' + jstr(p.script || {}) + '\nالبصري: ' + jstr(p.visual || {}) + '\nالـ prompt: ' + jstr(p.prompt || {}) +
+      // Fasa 21: brief padat (bukan dump penuh) → penjimatan token untuk Review.
+      return 'اللوحة (ملخّص): ' + jstr(ctx.panelBrief(p.panel)) +
+        '\nالنص: ' + jstr(ctx.scriptBrief(p.script)) +
+        '\nالبصري: ' + jstr(ctx.visualBrief(p.visual)) +
+        '\nالـ prompt (ملخّص): ' + jstr(ctx.promptBrief(p.prompt)) +
         '\n\nراجِع وأعِد JSON المطلوب.';
     default:
       return jstr(p);
@@ -371,11 +398,32 @@ function parseVisual(json, payload) {
 }
 
 // PROMPT: kuatkuasakan peraturan tokoh mulia + negatif asas secara deterministik.
+// Fasa 21: validation pre-ComfyUI — steril prompt (buci token internal/Arab/MB),
+// deteksi kebocoran bahasa, penegasan tokoh mulia ketat, batas panjang.
+// Pulang null (isyarat fallback deterministik) jika prompt tidak boleh diselamatkan.
 function parsePrompt(json, payload) {
   if (!json || typeof json !== 'object') return null;
   let promptText = s(json.prompt_text).trim();
   let negative = s(json.negative_prompt).trim();
   if (!promptText) return null;
+
+  // ---- Sterilisasi: buang token yang TIDAK boleh sampai ke ComfyUI ----
+  // (kod watak dalaman MUSA_001, placeholder, tanda pemformatan kurung).
+  promptText = promptText
+    .replace(/\b[A-Z]{2,}_\d{3}\b/g, '')        // kod watak dalaman (MUSA_001)
+    .replace(/\{\{[^}]*\}\}/g, '')              // placeholder {{...}}
+    .replace(/```[\s\S]*?```/g, '')             // pagar kod
+    .replace(/\s{2,}/g, ' ').trim();
+
+  // ---- Deteksi kebocoran bahasa: prompt EN tidak boleh ada skrip Arab ----
+  // (huruf Arab U+0600–U+06FF). Jika bocor teruk → fallback (jangan hantar teks
+  // Arab mentah ke model imej).
+  const arabic = /[\u0600-\u06FF]/.test(promptText);
+  if (arabic) return null;
+
+  // ---- Batas panjang munasabah (ComfyUI/SDXL lebih baik padat) ----
+  const MAX = 1200;
+  if (promptText.length > MAX) promptText = promptText.slice(0, MAX).replace(/[,;\s]+$/, '').trim();
 
   // Adakah panel mengandungi tokoh mulia? (daripada visual/charMap)
   const chars = charsBrief(payload && payload.characters);
