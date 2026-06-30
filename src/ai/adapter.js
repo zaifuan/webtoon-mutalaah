@@ -13,11 +13,13 @@
 const registry = require('./adapterRegistry');
 const dummyAdapter = require('./adapters/dummyAdapter');
 const ollamaAdapter = require('./adapters/ollamaAdapter');
+const claudeAdapter = require('./adapters/claudeAdapter');
 const config = require('./config');
 
 // ---- Bootstrap: daftar adapter terbina + tetapkan default dari config ------
 registry.register('dummy', dummyAdapter);
 registry.register('ollama', ollamaAdapter);
+registry.register('claude', claudeAdapter); // Fasa 19: provider penaakulan AI (default kekal ikut AI_PROVIDER)
 // (Fasa 12+: registry.register('lmstudio', lmStudioAdapter); — tanpa ubah engine)
 // Default kekal 'dummy' melainkan env AI_PROVIDER menetapkan sebaliknya.
 if (registry.has(config.AI_PROVIDER)) registry.setDefault(config.AI_PROVIDER);
