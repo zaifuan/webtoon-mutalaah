@@ -33,7 +33,7 @@
 // ===========================================================================
 
 const config = require('../config');
-const builder = require('../../prompts/builder');
+const storyDirector = require('../storyDirector');
 
 const PROVIDER = 'claude';
 
@@ -154,85 +154,55 @@ async function health() {
   return Object.assign({ ok: true, available: true, latency_ms: r.latency, models: models }, base);
 }
 
-// ---- KAEDAH FOKUS (guna Prompt Builder sedia ada) --------------------------
-// Struktur output SAMA dengan ollamaAdapter supaya boleh ditukar ganti tanpa
-// mengubah engine. (Templat → Arab pada Fasa 20; penyambungan enjin Fasa 21+.)
-async function generateScript(payload) {
-  if (!payloadHasContext(payload)) {
-    return result(true, { latency_ms: 0, note: 'payload tidak lengkap — respons fallback tempatan', text_ms: '', text_ar: '', emotion: 'calm', incomplete_payload: true });
+// ---- KAEDAH PENAAKULAN (Claude Story Director — Arab-first, Fasa 20) --------
+// Setiap kaedah: bina mesej (system Arab khusus engine) via storyDirector →
+// chat → parse → pulang { success, <items> }. Jika JSON tak sah / gagal →
+// { success:false } supaya pemanggil (engine route) FALLBACK ke deterministik.
+async function runEngine(engine, payload, itemKey) {
+  let messages;
+  try { messages = storyDirector.buildMessages(engine, payload || {}); }
+  catch (e) { return result(false, { latency_ms: 0, error: 'buildMessages gagal: ' + (e && e.message ? e.message : String(e)) }); }
+  const r = await chat(messages);
+  if (!r.ok) return result(false, { latency_ms: r.latency, error: r.error, timeout: !!r.timeout, engine: engine });
+  let parsed;
+  try { parsed = storyDirector.parse(engine, r.content, payload || {}); }
+  catch (e) { return result(false, { latency_ms: r.latency, error: 'parse gagal: ' + (e && e.message ? e.message : String(e)), engine: engine }); }
+  if (parsed === null || parsed === undefined) {
+    return result(false, { latency_ms: r.latency, error: 'Claude tidak menghasilkan JSON sah (' + engine + ')', engine: engine });
   }
-  let built;
-  try { built = await builder.buildGenerateScriptPrompt(payload); }
-  catch (e) { return result(false, { latency_ms: 0, error: 'Prompt builder gagal: ' + (e && e.message ? e.message : String(e)) }); }
-  const r = await chat(built.messages);
-  if (!r.ok) return result(false, { latency_ms: r.latency, error: r.error, timeout: !!r.timeout, prompt_version: built.version });
-  const j = tryParseJson(r.content);
-  if (j) {
-    return result(true, { latency_ms: r.latency, prompt_version: built.version, text_ms: j.text_ms || '', text_ar: j.text_ar || '', emotion: j.emotion || 'calm', notes: j.notes || '' });
-  }
-  return result(true, { latency_ms: r.latency, prompt_version: built.version, raw_text: r.content, note: 'model tidak menghasilkan JSON sah' });
+  const out = { latency_ms: r.latency, engine: engine };
+  out[itemKey] = parsed;
+  return result(true, out);
 }
 
+async function generateCharacter(payload) { return runEngine('character', payload, 'characters'); }
+async function generateScene(payload)     { return runEngine('scene', payload, 'scenes'); }
+async function generatePanel(payload)     { return runEngine('panel', payload, 'panels'); }
+async function generateScript(payload)    { return runEngine('script', payload, 'scripts'); }
+async function generateVisual(payload)    { return runEngine('visual', payload, 'visual'); }
+async function review(payload)            { return runEngine('review', payload, 'review'); }
+
+// PROMPT ENGINE: hasil EN diratakan → route boleh terus guna prompt_text/negative_prompt.
 async function generatePrompt(payload) {
-  if (!payloadHasContext(payload)) {
-    return result(true, { latency_ms: 0, note: 'payload tidak lengkap — respons fallback tempatan', prompt_text: '', negative_prompt: '', incomplete_payload: true });
-  }
-  let built;
-  try { built = await builder.buildGeneratePromptPrompt(payload); }
-  catch (e) { return result(false, { latency_ms: 0, error: 'Prompt builder gagal: ' + (e && e.message ? e.message : String(e)) }); }
-  const r = await chat(built.messages);
-  if (!r.ok) return result(false, { latency_ms: r.latency, error: r.error, timeout: !!r.timeout, prompt_version: built.version });
-  const j = tryParseJson(r.content);
-  if (j) {
-    return result(true, { latency_ms: r.latency, prompt_version: built.version, prompt_text: j.prompt_text || '', negative_prompt: j.negative_prompt || '', notes: j.notes || '' });
-  }
-  return result(true, { latency_ms: r.latency, prompt_version: built.version, raw_text: r.content, note: 'model tidak menghasilkan JSON sah' });
+  const out = await runEngine('prompt', payload, 'prompt');
+  if (out.success === false || !out.prompt) return out;
+  return result(true, Object.assign({ latency_ms: out.latency_ms }, out.prompt));
 }
 
+// PROMPT_REWRITE: prompt Claude sudah final → passthrough (rewrite dilangkau).
 async function rewritePrompt(payload) {
-  const hasPrompt = !!(payload && typeof payload === 'object' &&
-    (payload.prompt || (payload.prompt_text && typeof payload.prompt_text === 'string')));
-  if (!hasPrompt || !payloadHasContext(payload)) {
-    return result(true, { latency_ms: 0, note: 'payload tidak lengkap — respons fallback tempatan', prompt_text: payload && (payload.prompt || payload.prompt_text) || '', negative_prompt: payload && payload.negative_prompt || '', incomplete_payload: true });
-  }
-  let built;
-  try { built = await builder.buildRewritePrompt(payload); }
-  catch (e) { return result(false, { latency_ms: 0, error: 'Prompt builder gagal: ' + (e && e.message ? e.message : String(e)) }); }
-  const r = await chat(built.messages);
-  if (!r.ok) return result(false, { latency_ms: r.latency, error: r.error, timeout: !!r.timeout, prompt_version: built.version });
-  const j = tryParseJson(r.content);
-  if (j) {
-    return result(true, { latency_ms: r.latency, prompt_version: built.version, prompt_text: j.prompt_text || '', negative_prompt: j.negative_prompt || '', notes: j.notes || '' });
-  }
-  return result(true, { latency_ms: r.latency, prompt_version: built.version, raw_text: r.content, note: 'model tidak menghasilkan JSON sah' });
-}
-
-async function review(payload) {
-  if (!payloadHasContext(payload)) {
-    return result(true, { latency_ms: 0, note: 'payload tidak lengkap — respons fallback tempatan', qa_status: 'ok', issues: [] });
-  }
-  let built;
-  try { built = await builder.buildReviewPrompt(payload); }
-  catch (e) { return result(false, { latency_ms: 0, error: 'Prompt builder gagal: ' + (e && e.message ? e.message : String(e)) }); }
-  const r = await chat(built.messages);
-  if (!r.ok) return result(false, { latency_ms: r.latency, error: r.error, timeout: !!r.timeout, prompt_version: built.version });
-  const j = tryParseJson(r.content);
-  if (j) {
-    return result(true, { latency_ms: r.latency, prompt_version: built.version, qa_status: j.qa_status || 'ok', issues: Array.isArray(j.issues) ? j.issues : [], notes: j.notes || '' });
-  }
-  return result(true, { latency_ms: r.latency, prompt_version: built.version, raw_text: r.content, qa_status: 'warning', issues: ['model tidak menghasilkan JSON sah'] });
-}
-
-// ---- FALLBACK SELAMAT (kaedah lain — disambung pada FASA 22+) ---------------
-function fallback(kind) {
-  return async function (payload) {
-    return result(true, { latency_ms: 0, note: kind + ' belum disambung ke Claude (Fasa 22+). Fallback selamat tempatan.' });
-  };
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  return result(true, { latency_ms: 0, prompt_text: p.prompt || p.prompt_text || '', negative_prompt: p.negative_prompt || '', note: 'rewrite dilangkau — prompt Claude sudah final' });
 }
 
 // Penjanaan imej KEKAL di ComfyUI. Adapter Claude tidak menjana imej.
 async function generateImage(payload) {
   return result(false, { latency_ms: 0, message: 'Image generation kekal di ComfyUI; tidak dilaksanakan dalam Claude adapter.' });
+}
+
+// Fallback selamat untuk kaedah tanpa pemetaan naratif (text/export).
+function fallback(kind) {
+  return async function (payload) { return result(true, { latency_ms: 0, note: kind + ' tiada pemetaan Claude (fallback selamat).' }); };
 }
 
 module.exports = {
@@ -242,15 +212,15 @@ module.exports = {
     model: config.CLAUDE_MODEL,
     base_url: config.CLAUDE_BASE_URL,
     latency_ms: null,
-    description: 'Adapter Claude (Anthropic Messages API) — provider penaakulan AI. Default sistem ikut AI_PROVIDER.'
+    description: 'Adapter Claude (Anthropic Messages API) — Story Director Arab-first. Default sistem ikut AI_PROVIDER.'
   },
   health: health,
   generateText: fallback('generateText'),
-  generateCharacter: fallback('generateCharacter'),
-  generateScene: fallback('generateScene'),
-  generatePanel: fallback('generatePanel'),
+  generateCharacter: generateCharacter,
+  generateScene: generateScene,
+  generatePanel: generatePanel,
   generateScript: generateScript,
-  generateVisual: fallback('generateVisual'),
+  generateVisual: generateVisual,
   generatePrompt: generatePrompt,
   rewritePrompt: rewritePrompt,
   generateImage: generateImage,
@@ -259,5 +229,5 @@ module.exports = {
   // dieksport untuk ujian unit
   _chat: chat,
   _splitSystem: splitSystem,
-  _tryParseJson: tryParseJson
+  _runEngine: runEngine
 };

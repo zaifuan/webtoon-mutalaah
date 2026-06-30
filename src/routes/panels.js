@@ -6,6 +6,7 @@ const router = express.Router();
 const pool = require('../db/pool');
 const { PROJECT_STATUS } = require('../config/projectStatus');
 const { extractPanels, NOBLE_PANEL_NOTE } = require('../services/panelEngine');
+const ai = require('../ai/adapter'); // Fasa 20: Story Director (Claude-first, fallback deterministik)
 
 const PANEL_TYPES = ['establishing', 'character', 'dialogue', 'action', 'reaction', 'transition', 'reveal', 'closing'];
 const SHOT_TYPES = ['wide', 'medium', 'close_up', 'over_shoulder', 'low_angle', 'high_angle', 'detail'];
@@ -125,8 +126,16 @@ function normScene(row) {
 }
 
 // Jana panel bagi satu babak dalam transaksi sedia ada.
-async function generateForScene(client, scene, nobleSet) {
-  const templates = extractPanels(normScene(scene), nobleSet);
+async function generateForScene(client, scene, nobleSet, characters) {
+  const normed = normScene(scene);
+  // Fasa 20: Story Director (Claude) tentukan bilangan panel/shot/komposisi;
+  // fallback ke templat beat deterministik jika Claude gagal/JSON tak sah.
+  let templates = null;
+  try {
+    const r = await ai.generatePanel({ scene: normed, characters: characters || [] });
+    if (r && r.success !== false && Array.isArray(r.panels) && r.panels.length) templates = r.panels;
+  } catch (e) { console.error('[panels] claude:', e && e.message ? e.message : e); }
+  if (!templates) templates = extractPanels(normed, nobleSet);
   let created = 0, skipped = 0;
   for (var i = 0; i < templates.length; i++) {
     var ins = await client.query(
@@ -211,7 +220,8 @@ router.post('/scenes/:id/generate-panels', async (req, res) => {
     }
 
     const nobleSet = await nobleCodeSet(client, scene.project_id);
-    const result = await generateForScene(client, scene, nobleSet);
+    const chRows = await client.query('SELECT character_code, name_ar, name_ms, character_type, face_policy, role, visual_dna FROM characters WHERE project_id = $1 ORDER BY id ASC', [scene.project_id]);
+    const result = await generateForScene(client, scene, nobleSet, chRows.rows);
     const project = await syncPanelStatus(client, scene.project_id);
     const all = await client.query(
       `SELECT ${PANEL_COLUMNS} FROM panels WHERE scene_id = $1 ORDER BY panel_order ASC NULLS LAST, panel_no ASC`,
@@ -259,9 +269,10 @@ router.post('/projects/:id/generate-panels', async (req, res) => {
     }
 
     const nobleSet = await nobleCodeSet(client, id);
+    const chRows = await client.query('SELECT character_code, name_ar, name_ms, character_type, face_policy, role, visual_dna FROM characters WHERE project_id = $1 ORDER BY id ASC', [id]);
     let detected = 0, created = 0, skipped = 0;
     for (var i = 0; i < scs.rows.length; i++) {
-      var r = await generateForScene(client, scs.rows[i], nobleSet);
+      var r = await generateForScene(client, scs.rows[i], nobleSet, chRows.rows);
       detected += r.detected; created += r.created; skipped += r.skipped;
     }
 

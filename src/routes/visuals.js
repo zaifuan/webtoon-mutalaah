@@ -8,6 +8,7 @@ const { PROJECT_STATUS } = require('../config/projectStatus');
 const { VISUAL_ENUM_FIELDS, LAYOUT_ENUM_FIELDS, isValid } = require('../config/visualDirector');
 const { extractVisual, NOBLE_VISUAL_NOTE } = require('../services/visualEngine');
 const { resolveScript } = require('../services/scriptSource');
+const ai = require('../ai/adapter'); // Fasa 20: Visual Director (Claude-first, fallback deterministik)
 
 const VISUAL_COLUMNS =
   'id, project_id, scene_id, panel_id, camera, shot, angle, lens, composition, ' +
@@ -173,10 +174,30 @@ function panelNorm(row) {
 }
 
 // Jana visual bagi satu panel dalam transaksi sedia ada (idempotent).
+// Fasa 20: gabung asas deterministik (pautan DB + susun atur watak + kuatkuasa
+// tokoh mulia) dengan pilihan sinematografi Claude. Hanya medan kamera/cahaya/
+// komposisi diganti; pautan & layout kekal daripada extractVisual yang terbukti.
+function mergeVisualBase(panel, scene, script, charMap, cv) {
+  const base = extractVisual(panel, scene || {}, script, charMap);
+  const FIELDS = ['camera', 'shot', 'angle', 'lens', 'composition', 'camera_movement',
+    'lighting', 'atmosphere', 'time_of_day', 'weather', 'color_palette',
+    'detail_level', 'depth', 'focus', 'visual_priority'];
+  FIELDS.forEach(function (f) { if (cv[f] != null && cv[f] !== '') base[f] = cv[f]; });
+  if (cv.visual_notes) base.visual_notes = cv.visual_notes;
+  if (cv.face_policy === 'glowing_light') base.face_policy = 'glowing_light'; // jangan longgar
+  return base;
+}
+
 async function generateForPanel(client, panelRow, scene, charMap) {
   const panel = panelNorm(panelRow);
   const script = await resolveScript(client, panel, scene || {}, charMap);
-  const v = extractVisual(panel, scene || {}, script, charMap);
+  let v = null;
+  try {
+    const charsArr = Object.keys(charMap || {}).map(function (code) { return Object.assign({ character_code: code }, charMap[code]); });
+    const r = await ai.generateVisual({ panel: panel, scene: scene || {}, script: script, characters: charsArr });
+    if (r && r.success !== false && r.visual && typeof r.visual === 'object') v = mergeVisualBase(panel, scene, script, charMap, r.visual);
+  } catch (e) { console.error('[visuals] claude:', e && e.message ? e.message : e); }
+  if (!v) v = extractVisual(panel, scene || {}, script, charMap);
   const ins = await client.query(
     INSERT_HEAD + ' ON CONFLICT (panel_id) DO NOTHING RETURNING id',
     visualParams(v)

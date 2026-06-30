@@ -11,6 +11,7 @@ const {
 } = require('../config/promptStyle');
 const { buildPrompt, enforceNoblePrompt, panelHasNoble } = require('../services/promptEngine');
 const { resolveScript } = require('../services/scriptSource');
+const ai = require('../ai/adapter'); // Fasa 20: Image Prompt Director (Claude EN, fallback deterministik)
 
 const PROMPT_COLUMNS =
   'id, project_id, scene_id, panel_id, prompt_text, negative_prompt, ' +
@@ -87,7 +88,25 @@ function shape(row) {
 
 async function insertPrompt(client, shaped, charMap) {
   const script = await resolveScript(client, shaped.panel, shaped.scene, charMap);
-  const p = buildPrompt(shaped.panel, shaped.scene, script, shaped.visual, charMap);
+  // Fasa 20: Image Prompt Director (Claude) hasilkan prompt EN profesional;
+  // fallback ke buildPrompt deterministik jika gagal. Enforcement tokoh mulia
+  // sudah dikuatkuasakan dalam parser Claude DAN dalam buildPrompt.
+  let p = null;
+  try {
+    const charsArr = Object.keys(charMap || {}).map(function (code) { return Object.assign({ character_code: code }, charMap[code]); });
+    const r = await ai.generatePrompt({ panel: shaped.panel, scene: shaped.scene, script: script, visual: shaped.visual, characters: charsArr });
+    if (r && r.success !== false && r.prompt_text && String(r.prompt_text).trim()) {
+      p = {
+        prompt_text: String(r.prompt_text).trim(),
+        negative_prompt: r.negative_prompt || '',
+        style_preset: r.style_preset || 'webtoon_mutalaah',
+        language: r.language || 'en',
+        prompt_version: r.prompt_version || 'v2-claude',
+        status: (['draft', 'ready', 'approved'].indexOf(r.status) !== -1 ? r.status : 'ready')
+      };
+    }
+  } catch (e) { console.error('[prompts] claude:', e && e.message ? e.message : e); }
+  if (!p) p = buildPrompt(shaped.panel, shaped.scene, script, shaped.visual, charMap);
   const ins = await client.query(
     INSERT_HEAD + ' ON CONFLICT (panel_id) DO NOTHING RETURNING id',
     [shaped.panel.project_id, shaped.panel.scene_id, shaped.panel.id,

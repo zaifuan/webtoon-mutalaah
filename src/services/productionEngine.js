@@ -265,6 +265,17 @@ async function rewriteImagePrompt(resolvedPayload) {
   // Tidak boleh rewrite tanpa prompt asal.
   if (!basePrompt) return resolvedPayload;
 
+  // Fasa 20: jangan paksa 'ollama'. Jika provider lalai = claude, prompt imej
+  // sudah final daripada Image Prompt Director (Claude) → langkau rewrite.
+  const provider = (aiAdapter.registry && typeof aiAdapter.registry.getDefault === 'function')
+    ? aiAdapter.registry.getDefault() : 'dummy';
+  if (provider === 'claude') {
+    return Object.assign({}, p, {
+      prompt: basePrompt, negative_prompt: baseNegative,
+      prompt_rewritten: false, prompt_rewrite_skipped: 'claude_final'
+    });
+  }
+
   // Kumpulkan konteks penuh: panel + scene + visual + DNA watak.
   let context = null;
   if (panelId) {
@@ -283,18 +294,18 @@ async function rewriteImagePrompt(resolvedPayload) {
     task: 'PROMPT_REWRITE'
   });
 
-  // Panggil Ollama (provider TERTENTU, bukan lalai) untuk PROMPT_REWRITE.
+  // Guna provider lalai semasa (BUKAN 'ollama' yang dipaksa) untuk PROMPT_REWRITE.
   let rewritten = null;
   try {
-    const out = await aiAdapter.runJobOn('ollama', 'PROMPT_REWRITE', rewritePayload);
+    const out = await aiAdapter.runJobOn(provider, 'PROMPT_REWRITE', rewritePayload);
     if (out && out.success !== false && out.prompt_text && String(out.prompt_text).trim()) {
       rewritten = { prompt: String(out.prompt_text).trim(), negative_prompt: out.negative_prompt || baseNegative };
-      console.log('[production] PROMPT_REWRITE ollama OK panel#' + panelId + ' (' + out.latency_ms + 'ms)');
+      console.log('[production] PROMPT_REWRITE ' + provider + ' OK panel#' + panelId + ' (' + out.latency_ms + 'ms)');
     } else if (out && out.success === false) {
-      console.warn('[production] PROMPT_REWRITE ollama gagal: ' + (out.error || '?') + ' — guna prompt asal');
+      console.warn('[production] PROMPT_REWRITE ' + provider + ' gagal: ' + (out.error || '?') + ' — guna prompt asal');
     }
   } catch (e) {
-    console.warn('[production] PROMPT_REWRITE ollama exception: ' + e.message + ' — guna prompt asal');
+    console.warn('[production] PROMPT_REWRITE ' + provider + ' exception: ' + e.message + ' — guna prompt asal');
   }
 
   // Output Ollama menjadi prompt AKHIR; jika tiada → kekalkan prompt asal.

@@ -21,6 +21,7 @@ const pool = require('../db/pool');
 const { PROJECT_STATUS } = require('../config/projectStatus');
 const { generateScripts, SCRIPT_TYPES, BUBBLE_TYPES, EMOTIONS, STATUSES } =
   require('../services/scriptEngine');
+const ai = require('../ai/adapter'); // Fasa 20: Story Director (Claude-first, fallback deterministik)
 
 const SCRIPT_COLUMNS =
   'id, project_id, scene_id, panel_id, script_order, script_type, speaker_code, ' +
@@ -110,8 +111,20 @@ async function syncScriptStatus(client, projectId) {
 
 // Jana skrip bagi satu panel dalam transaksi sedia ada (idempotent).
 //   created = bilangan baris baru; skipped = yang sudah wujud.
-async function generateForPanel(client, panel, scene) {
-  const items = generateScripts(panel, scene);
+async function generateForPanel(client, panel, scene, characters) {
+  // Fasa 20: Story Director (Claude) tulis dialog/narasi/kapsyen Arab; fallback
+  // ke skrip deterministik jika gagal. Isi speaker_name daripada peta watak.
+  let items = null;
+  try {
+    const r = await ai.generateScript({ panel: panel, scene: scene, characters: characters || [] });
+    if (r && r.success !== false && Array.isArray(r.scripts) && r.scripts.length) {
+      const nameByCode = {};
+      (characters || []).forEach(function (c) { nameByCode[c.character_code] = c.name_ar || c.name_ms || c.character_code; });
+      r.scripts.forEach(function (it) { if (it.speaker_code && !it.speaker_name) it.speaker_name = nameByCode[it.speaker_code] || ''; });
+      items = r.scripts;
+    }
+  } catch (e) { console.error('[scripts] claude:', e && e.message ? e.message : e); }
+  if (!items) items = generateScripts(panel, scene);
   let created = 0, skipped = 0;
   for (var i = 0; i < items.length; i++) {
     var it = items[i];
@@ -208,13 +221,14 @@ router.post('/projects/:id/generate-scripts', async (req, res) => {
     );
     const sceneMap = {};
     scs.rows.forEach(function (s) { sceneMap[String(s.id)] = s; });
+    const chRows = await client.query('SELECT character_code, name_ar, name_ms, character_type, face_policy, role, visual_dna FROM characters WHERE project_id = $1 ORDER BY id ASC', [id]);
 
     let detected = 0, created = 0, skipped = 0;
     for (var i = 0; i < pls.rows.length; i++) {
       var panel = pls.rows[i];
       panel.characters_json = jget(panel.characters_json) || [];
       var scene = sceneMap[String(panel.scene_id)] || {};
-      var r = await generateForPanel(client, panel, scene);
+      var r = await generateForPanel(client, panel, scene, chRows.rows);
       detected += r.detected; created += r.created; skipped += r.skipped;
     }
 
@@ -266,7 +280,8 @@ router.post('/panels/:id/generate-scripts', async (req, res) => {
     );
     const scene = sc.rows[0] || {};
 
-    const r = await generateForPanel(client, panel, scene);
+    const chRows = await client.query('SELECT character_code, name_ar, name_ms, character_type, face_policy, role, visual_dna FROM characters WHERE project_id = $1 ORDER BY id ASC', [panel.project_id]);
+    const r = await generateForPanel(client, panel, scene, chRows.rows);
     const project = await syncScriptStatus(client, panel.project_id);
     const all = await client.query(
       `SELECT ${SCRIPT_COLUMNS} FROM scripts WHERE panel_id = $1 ORDER BY reading_order ASC NULLS LAST, script_order ASC, id ASC`,

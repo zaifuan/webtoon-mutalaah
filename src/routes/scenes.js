@@ -6,6 +6,7 @@ const router = express.Router();
 const pool = require('../db/pool');
 const { PROJECT_STATUS } = require('../config/projectStatus');
 const { extractScenes } = require('../services/sceneEngine');
+const ai = require('../ai/adapter'); // Fasa 20: Story Director (Claude-first, fallback deterministik)
 
 const SCENE_TYPES = ['intro', 'journey', 'meeting', 'lesson', 'event', 'reveal', 'ending'];
 
@@ -317,13 +318,19 @@ router.post('/projects/:id/generate-scenes', async (req, res) => {
       await client.query('ROLLBACK');
       return res.status(400).json({ ok: false, error: 'Sila masukkan teks Mutalaah dahulu.' });
     }
-    const ch = await client.query('SELECT count(*)::int AS n FROM characters WHERE project_id = $1', [id]);
-    if (ch.rows[0].n === 0) {
+    const ch = await client.query('SELECT character_code, name_ar, name_ms, character_type, face_policy, role, visual_dna FROM characters WHERE project_id = $1 ORDER BY id ASC', [id]);
+    if (ch.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(400).json({ ok: false, error: 'Sila jana watak dahulu sebelum jana babak.' });
     }
 
-    const templates = extractScenes(original);
+    // Fasa 20: Story Director (Claude) dahulu; fallback ke engine deterministik.
+    let templates = null;
+    try {
+      const r = await ai.generateScene({ text_ar: original, characters: ch.rows });
+      if (r && r.success !== false && Array.isArray(r.scenes) && r.scenes.length) templates = r.scenes;
+    } catch (e) { console.error('[scenes] claude:', e && e.message ? e.message : e); }
+    if (!templates) templates = extractScenes(original);
     let created = 0;
     let skipped = 0;
 

@@ -8,6 +8,7 @@ const { CHARACTER_TYPES, CHARACTER_TYPE_VALUES } = require('../config/characterT
 const { PROJECT_STATUS } = require('../config/projectStatus');
 const { isNobleName, NOBLE_PROFILE } = require('../config/nobleFigures');
 const { extractCharacters } = require('../services/characterEngine');
+const ai = require('../ai/adapter'); // Fasa 20: Story Director (Claude-first, fallback deterministik)
 
 const FACE_POLICIES = ['normal', 'glowing_light'];
 
@@ -319,7 +320,13 @@ router.post('/projects/:id/generate-characters', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Tiada teks Arab untuk dianalisis. Sila simpan teks dahulu.' });
     }
 
-    const templates = extractCharacters(original);
+    // Fasa 20: Story Director (Claude) dahulu; fallback ke engine deterministik.
+    let templates = null;
+    try {
+      const r = await ai.generateCharacter({ text_ar: original });
+      if (r && r.success !== false && Array.isArray(r.characters) && r.characters.length) templates = r.characters;
+    } catch (e) { console.error('[characters] claude:', e && e.message ? e.message : e); }
+    if (!templates) templates = extractCharacters(original);
     const created = [];
     const skipped = [];
 
