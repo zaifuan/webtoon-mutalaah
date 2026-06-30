@@ -116,15 +116,22 @@ async function generateForPanel(client, panel, scene, characters) {
   // ke skrip deterministik jika gagal. Isi speaker_name daripada peta watak.
   let items = null;
   try {
+    console.log('[debug-script] panel_id=' + panel.id + ' before ai call');
     const r = await ai.generateScript({ panel: panel, scene: scene, characters: characters || [] });
+    console.log('[debug-script] ai result success=' + (r && r.success) + ' error=' + (r && r.error ? r.error : '') + ' scripts=' + (r && Array.isArray(r.scripts) ? r.scripts.length : 'n/a'));
     if (r && r.success !== false && Array.isArray(r.scripts) && r.scripts.length) {
       const nameByCode = {};
       (characters || []).forEach(function (c) { nameByCode[c.character_code] = c.name_ar || c.name_ms || c.character_code; });
       r.scripts.forEach(function (it) { if (it.speaker_code && !it.speaker_name) it.speaker_name = nameByCode[it.speaker_code] || ''; });
       items = r.scripts;
+      console.log('[debug-script] using claude result count=' + items.length);
+    } else {
+      console.log('[debug-script] raw preview=' + (r && r.raw_preview ? String(r.raw_preview).slice(0, 160) : '(none)'));
+      console.log('[debug-script] falling back deterministic reason=' + (!r ? 'ai-null' : (r.success === false ? ('ai-failed:' + (r.error || '?')) : 'empty-scripts')));
     }
-  } catch (e) { console.error('[scripts] claude:', e && e.message ? e.message : e); }
+  } catch (e) { console.error('[scripts] claude:', e && e.message ? e.message : e); console.log('[debug-script] falling back deterministic reason=exception'); }
   if (!items) items = generateScripts(panel, scene);
+  console.log('[debug-script] templates count=' + items.length);
   let created = 0, skipped = 0;
   for (var i = 0; i < items.length; i++) {
     var it = items[i];
@@ -136,6 +143,7 @@ async function generateForPanel(client, panel, scene, characters) {
     );
     if (ins.rows.length > 0) created++; else skipped++;
   }
+  console.log('[debug-script] insert created=' + created + ' skipped=' + skipped);
   return { detected: items.length, created: created, skipped: skipped };
 }
 

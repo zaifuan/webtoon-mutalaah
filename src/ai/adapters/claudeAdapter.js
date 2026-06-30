@@ -168,7 +168,10 @@ async function runEngine(engine, payload, itemKey) {
   try { parsed = storyDirector.parse(engine, r.content, payload || {}); }
   catch (e) { return result(false, { latency_ms: r.latency, error: 'parse gagal: ' + (e && e.message ? e.message : String(e)), engine: engine }); }
   if (parsed === null || parsed === undefined) {
-    return result(false, { latency_ms: r.latency, error: 'Claude tidak menghasilkan JSON sah (' + engine + ')', engine: engine });
+    // Fasa 22: sertakan pratonton mentah pendek (≤160 aksara) supaya route boleh
+    // log sebab kegagalan (cth. JSON terpotong max_tokens). Tiada API key/teks panjang.
+    const preview = String(r.content || '').replace(/\s+/g, ' ').trim().slice(0, 160);
+    return result(false, { latency_ms: r.latency, error: 'Claude tidak menghasilkan JSON sah (' + engine + ')', engine: engine, raw_preview: preview });
   }
   const out = { latency_ms: r.latency, engine: engine };
   out[itemKey] = parsed;

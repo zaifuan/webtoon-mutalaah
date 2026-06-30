@@ -193,15 +193,24 @@ async function generateForPanel(client, panelRow, scene, charMap) {
   const script = await resolveScript(client, panel, scene || {}, charMap);
   let v = null;
   try {
+    console.log('[debug-visual] panel_id=' + panel.id + ' before ai call');
     const charsArr = Object.keys(charMap || {}).map(function (code) { return Object.assign({ character_code: code }, charMap[code]); });
     const r = await ai.generateVisual({ panel: panel, scene: scene || {}, script: script, characters: charsArr });
-    if (r && r.success !== false && r.visual && typeof r.visual === 'object') v = mergeVisualBase(panel, scene, script, charMap, r.visual);
-  } catch (e) { console.error('[visuals] claude:', e && e.message ? e.message : e); }
+    console.log('[debug-visual] ai result success=' + (r && r.success) + ' error=' + (r && r.error ? r.error : '') + ' hasVisual=' + !!(r && r.visual && typeof r.visual === 'object'));
+    if (r && r.success !== false && r.visual && typeof r.visual === 'object') {
+      v = mergeVisualBase(panel, scene, script, charMap, r.visual);
+      console.log('[debug-visual] template ready shot=' + (v && v.shot) + ' lighting=' + (v && v.lighting));
+    } else {
+      console.log('[debug-visual] raw preview=' + (r && r.raw_preview ? String(r.raw_preview).slice(0, 160) : '(none)'));
+      console.log('[debug-visual] falling back deterministic reason=' + (!r ? 'ai-null' : (r.success === false ? ('ai-failed:' + (r.error || '?')) : 'no-visual-object')));
+    }
+  } catch (e) { console.error('[visuals] claude:', e && e.message ? e.message : e); console.log('[debug-visual] falling back deterministic reason=exception'); }
   if (!v) v = extractVisual(panel, scene || {}, script, charMap);
   const ins = await client.query(
     INSERT_HEAD + ' ON CONFLICT (panel_id) DO NOTHING RETURNING id',
     visualParams(v)
   );
+  console.log('[debug-visual] insert created=' + (ins.rows.length > 0 ? 1 : 0));
   return ins.rows.length > 0 ? 1 : 0;
 }
 

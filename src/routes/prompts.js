@@ -93,9 +93,12 @@ async function insertPrompt(client, shaped, charMap) {
   // sudah dikuatkuasakan dalam parser Claude DAN dalam buildPrompt.
   let p = null;
   try {
+    console.log('[debug-prompt] panel_id=' + shaped.panel.id + ' before ai call');
     const charsArr = Object.keys(charMap || {}).map(function (code) { return Object.assign({ character_code: code }, charMap[code]); });
     const r = await ai.generatePrompt({ panel: shaped.panel, scene: shaped.scene, script: script, visual: shaped.visual, characters: charsArr });
-    if (r && r.success !== false && r.prompt_text && String(r.prompt_text).trim()) {
+    const hasText = !!(r && r.success !== false && r.prompt_text && String(r.prompt_text).trim());
+    console.log('[debug-prompt] ai result success=' + (r && r.success) + ' error=' + (r && r.error ? r.error : '') + ' hasPromptText=' + hasText);
+    if (hasText) {
       p = {
         prompt_text: String(r.prompt_text).trim(),
         negative_prompt: r.negative_prompt || '',
@@ -104,14 +107,19 @@ async function insertPrompt(client, shaped, charMap) {
         prompt_version: r.prompt_version || 'v2-claude',
         status: (['draft', 'ready', 'approved'].indexOf(r.status) !== -1 ? r.status : 'ready')
       };
+    } else {
+      console.log('[debug-prompt] raw preview=' + (r && r.raw_preview ? String(r.raw_preview).slice(0, 160) : '(none)'));
+      console.log('[debug-prompt] falling back deterministic reason=' + (!r ? 'ai-null' : (r.success === false ? ('ai-failed:' + (r.error || '?')) : 'empty-prompt')));
     }
-  } catch (e) { console.error('[prompts] claude:', e && e.message ? e.message : e); }
+  } catch (e) { console.error('[prompts] claude:', e && e.message ? e.message : e); console.log('[debug-prompt] falling back deterministic reason=exception'); }
   if (!p) p = buildPrompt(shaped.panel, shaped.scene, script, shaped.visual, charMap);
+  console.log('[debug-prompt] prompt length=' + (p.prompt_text || '').length + ' has arabic leak=' + /[\u0600-\u06FF]/.test(p.prompt_text || '') + ' has internal code=' + /[A-Z]{2,}_\d{3}/.test(p.prompt_text || ''));
   const ins = await client.query(
     INSERT_HEAD + ' ON CONFLICT (panel_id) DO NOTHING RETURNING id',
     [shaped.panel.project_id, shaped.panel.scene_id, shaped.panel.id,
      p.prompt_text, p.negative_prompt, p.style_preset, p.language, p.prompt_version, p.status]
   );
+  console.log('[debug-prompt] insert created=' + (ins.rows.length > 0 ? 1 : 0));
   return ins.rows.length > 0 ? 1 : 0;
 }
 

@@ -132,10 +132,19 @@ async function generateForScene(client, scene, nobleSet, characters) {
   // fallback ke templat beat deterministik jika Claude gagal/JSON tak sah.
   let templates = null;
   try {
+    console.log('[debug-panel] scene_id=' + scene.id + ' before ai call');
     const r = await ai.generatePanel({ scene: normed, characters: characters || [] });
-    if (r && r.success !== false && Array.isArray(r.panels) && r.panels.length) templates = r.panels;
-  } catch (e) { console.error('[panels] claude:', e && e.message ? e.message : e); }
+    console.log('[debug-panel] ai result success=' + (r && r.success) + ' error=' + (r && r.error ? r.error : '') + ' panels=' + (r && Array.isArray(r.panels) ? r.panels.length : 'n/a'));
+    if (r && r.success !== false && Array.isArray(r.panels) && r.panels.length) {
+      templates = r.panels;
+      console.log('[debug-panel] using claude result count=' + templates.length);
+    } else {
+      console.log('[debug-panel] raw preview=' + (r && r.raw_preview ? String(r.raw_preview).slice(0, 160) : '(none)'));
+      console.log('[debug-panel] falling back deterministic reason=' + (!r ? 'ai-null' : (r.success === false ? ('ai-failed:' + (r.error || '?')) : 'empty-panels')));
+    }
+  } catch (e) { console.error('[panels] claude:', e && e.message ? e.message : e); console.log('[debug-panel] falling back deterministic reason=exception'); }
   if (!templates) templates = extractPanels(normed, nobleSet);
+  console.log('[debug-panel] templates count=' + templates.length);
   let created = 0, skipped = 0;
   for (var i = 0; i < templates.length; i++) {
     var ins = await client.query(
@@ -144,6 +153,7 @@ async function generateForScene(client, scene, nobleSet, characters) {
     );
     if (ins.rows.length > 0) created++; else skipped++;
   }
+  console.log('[debug-panel] insert created=' + created + ' skipped=' + skipped);
   return { detected: templates.length, created: created, skipped: skipped };
 }
 
