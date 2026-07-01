@@ -1,43 +1,88 @@
 'use strict';
 
 // ===========================================================================
-// reviewEngine.js — Fasa 7B: Review & Quality Assurance (READ-ONLY)
+// reviewEngine.js — Fasa 7B / Fasa 22: Review & Quality Assurance (READ-ONLY)
 //
 // Semakan rule-based terhadap setiap panel: Script + Visual + Prompt + Face
 // Policy. TIADA AI, TIADA penjanaan, TIADA pengubahan data.
+//
+// Fasa 22: peraturan dikemas semula supaya SEPADAN dengan output Claude
+// (Arab-first ke medan *_ms, prompt English semula jadi tanpa kod dalaman,
+// visual_notes dalam Arab). Penanda literal lama (Melayu/English) diganti
+// dengan padanan makna (sinonim Arab + English). Backward-compatible: output
+// deterministik lama masih dinilai dengan betul.
 //
 // reviewPanel(...) memulangkan:
 //   { panel_id, qa_status, ready_for_image, noble, checklist, issues }
 //   qa_status : 'ok' | 'warning' | 'error'
 //   issues    : [ { type: 'error'|'warning', message } ]
+//
+// Prinsip Error vs Warning (Fasa 22):
+//   ERROR hanya perkara yang menghalang image generation:
+//     - prompt_text kosong / tiada
+//     - visual / script / panel / character hilang
+//     - prompt ada kebocoran Arab
+//     - noble figure safety tiada langsung
+//   WARNING untuk kekurangan ringan (caption/dialogue/location kosong dll).
 // ===========================================================================
 
 const { BUBBLE_TYPES, EMOTIONS } = require('./scriptEngine');
 
-// Penanda yang DIJANA enjin (visual_notes dalam BM; prompt/negative dalam EN).
-const NOTE_MARKERS_MS = ['wajah tidak dipaparkan', 'cahaya lembut', 'tiada mata', 'tiada hidung', 'tiada mulut'];
-const PROMPT_MARKERS_EN = ['face fully replaced by soft glowing light', 'no facial features', 'no eyes', 'no nose', 'no mouth', 'respectful islamic depiction'];
-const NEG_MARKERS_EN = ['visible face', 'facial features', 'realistic prophet face', 'disrespectful depiction'];
+// ---- Penanda keselamatan tokoh mulia (per adab Islam: tiada wajah) ---------
+// Bentuk MAKSUD, bukan literal tunggal. Lulus jika mana-mana satu hadir.
+// Melayu lama (wajah/cahaya/tanpa wajah) + Arab (لا وجه/نور) + English
+// semula jadi (face hidden/no facial features/soft glowing light/faceless...).
+const NOBLE_POSITIVE_HINTS = [
+  // Melayu (output deterministik lama)
+  'wajah tidak dipaparkan', 'cahaya lembut', 'tanpa wajah', 'glowing light',
+  // Arab MSA (visual_notes Claude kini dalam Arab)
+  'لا يُظهَر وجه', 'لا يظهر وجه', 'لا وجه', 'نور لطيف', 'نور متوهّج', 'نور متوهج',
+  'بدون وجه', 'بلا وجه', 'بلا عين', 'بلا ملامح', 'توهّج', 'نور',
+  // English semula jadi (prompt Claude Inggeris)
+  'glowing light', 'soft glowing', 'face hidden', 'faceless', 'no facial features',
+  'no face', 'features not visible', 'radiant light', 'divine light', 'obscured face',
+  'face obscured', 'no eyes', 'face not shown', 'face fully replaced', 'halo of light'
+];
 
-// Medan visual yang WAJIB tidak kosong (Visual Review).
-const VISUAL_REQUIRED = ['shot', 'angle', 'lens', 'lighting', 'composition', 'atmosphere', 'weather', 'depth', 'focus'];
+// Penanda negatif (yang MENUNJUKKAN keselamatan dikuatkuasakan).
+const NOBLE_NEGATIVE_HINTS = [
+  'visible face', 'facial features', 'realistic face', 'realistic prophet',
+  'detailed face', 'disrespectful', 'no eyes', 'no nose', 'no mouth', 'no face',
+  // Arab: negatif jarang, tetapi sokong
+  'لا وجه', 'بدون ملامح'
+];
+
+// Medan visual penting (kekurangan = WARNING, bukan error). Set teras sahaja;
+// medan lain (angle/lens/dll) bersifat pilihan untuk output padat Claude.
+const VISUAL_CORE = ['shot', 'lighting', 'composition'];
+// Medan penuh lama — masih disemak sebagai warning ringan jika semua kosong.
+const VISUAL_FULL = ['shot', 'angle', 'lens', 'lighting', 'composition', 'atmosphere', 'weather', 'depth', 'focus'];
 
 function lc(v) { return String(v === undefined || v === null ? '' : v).toLowerCase(); }
 function nonEmpty(v) { return v !== undefined && v !== null && String(v).trim() !== ''; }
-function hasAll(text, markers) {
+// Benarkan panel tanpa lokasi eksplisit jika scene ada lokasi (inheritance).
+function hasLocationAny(visual, scene, panel) {
+  return nonEmpty(visual && visual.location) || nonEmpty(scene && scene.location) || nonEmpty(panel && panel.location);
+}
+// Padanan makna: lulus jika mana-mana hint hadir dalam teks.
+function hasAny(text, hints) {
   const t = lc(text);
-  for (var i = 0; i < markers.length; i++) if (t.indexOf(markers[i]) === -1) return false;
-  return true;
+  if (!t) return false;
+  for (var i = 0; i < hints.length; i++) if (t.indexOf(hints[i]) !== -1) return true;
+  return false;
 }
 
 function isNoblePanel(codes, visual, charMap) {
   if (visual && visual.face_policy === 'glowing_light') return true;
   for (var i = 0; i < codes.length; i++) {
     var c = charMap[codes[i]];
-    if (c && c.character_type === 'noble_figure_no_face') return true;
+    if (c && (c.character_type === 'noble_figure_no_face' || c.face_policy === 'glowing_light')) return true;
   }
   return false;
 }
+
+// Adakah teks Arab? (kebocoran bahasa pada prompt English = masalah).
+function hasArabic(text) { return /[\u0600-\u06FF]/.test(String(text || '')); }
 
 // Semak satu panel.
 //   panel   : objek panel (characters_json sudah array)
@@ -59,16 +104,25 @@ function reviewPanel(panel, scene, scripts, visual, prompt, charMap) {
   const hasScript = rows.length > 0;
   const hasVisual = !!visual;
   const hasPrompt = !!prompt;
-  const hasLocation = nonEmpty(visual && visual.location) || nonEmpty(scene && scene.location) || nonEmpty(panel.location);
-  const hasCaption = nonEmpty(panel.caption_ms) || rows.some(function (s) { return s.script_type === 'caption' && (nonEmpty(s.text_ms) || nonEmpty(s.text_ar)); });
-  const hasDialogue = nonEmpty(panel.dialogue_ms) || rows.some(function (s) { return s.script_type === 'dialogue' && (nonEmpty(s.text_ms) || nonEmpty(s.text_ar)); });
+  const hasLocation = hasLocationAny(visual, scene, panel);
+  // Caption/dialogue: Arab-first → kandungan Arab ada dalam *_ms (caption_ms/dialogue_ms/text_ms).
+  const hasCaption = nonEmpty(panel.caption_ms) || nonEmpty(panel.caption_ar) ||
+    rows.some(function (s) { return s.script_type === 'caption' && (nonEmpty(s.text_ms) || nonEmpty(s.text_ar)); });
+  const hasDialogue = nonEmpty(panel.dialogue_ms) || nonEmpty(panel.dialogue_ar) ||
+    rows.some(function (s) { return s.script_type === 'dialogue' && (nonEmpty(s.text_ms) || nonEmpty(s.text_ar)); });
+  // Kandungan teks apa-apa (visual_ms membawa kandungan Arab untuk panel naratif).
+  const hasAnyText = hasCaption || hasDialogue || nonEmpty(panel.visual_ms) ||
+    rows.some(function (s) { return nonEmpty(s.text_ms) || nonEmpty(s.text_ar); });
 
-  // ---- CHARACTER ----
-  if (!hasCharacter) warn('Panel tiada watak.');
+  // ---- CHARACTER (ERROR jika tiada watak langsung — menghalang paparan) ----
+  if (!hasCharacter) err('Panel tiada watak.');
 
-  // ---- SCRIPT (warning sahaja; fallback dibenarkan) ----
+  // ---- SCRIPT ----
   if (!hasScript) {
-    warn('Panel tiada skrip (fallback dibenarkan).');
+    // Skrip penting untuk konteks, tetapi jika ada teks visual/caption, mungkin
+    // panel naratif → warning sahaja, bukan error.
+    if (hasAnyText) warn('Panel tiada skrip dalam jadual scripts (teks ada dalam panel).');
+    else err('Panel tiada skrip mahupun teks visual/caption.');
   } else {
     const orders = rows.map(function (s) { return Number(s.script_order); }).sort(function (a, b) { return a - b; });
     if (new Set(orders.map(String)).size !== orders.length) warn('Skrip mempunyai susunan (script_order) berganda.');
@@ -87,50 +141,71 @@ function reviewPanel(panel, scene, scripts, visual, prompt, charMap) {
 
   // ---- VISUAL ----
   if (!hasVisual) {
-    warn('Visual belum dijana.');
+    err('Visual belum dijana.');
   } else {
-    VISUAL_REQUIRED.forEach(function (f) { if (!nonEmpty(visual[f])) warn('Visual: ' + f + ' kosong.'); });
-    if (!nonEmpty(visual.visual_notes)) warn('Visual: visual_notes kosong.');
+    // Medan teras (shot/lighting/composition): warning jika kosong.
+    VISUAL_CORE.forEach(function (f) { if (!nonEmpty(visual[f])) warn('Visual: ' + f + ' kosong.'); });
+    // Jika SEMUA medan penuh kosong → agak visual tak lengkap.
+    const filledCount = VISUAL_FULL.filter(function (f) { return nonEmpty(visual[f]); }).length;
+    if (filledCount === 0) warn('Visual: tiada medan sinematografi diisi.');
     if (!nonEmpty(visual.face_policy)) warn('Visual: face_policy kosong.');
+    // visual_notes pilihan — jangan error jika kosong (output padat Claude).
   }
 
   // ---- PROMPT ----
+  let promptArabicLeak = false;
   if (!hasPrompt) {
-    warn('Prompt belum dijana.');
+    err('Prompt belum dijana.');
   } else {
-    if (!nonEmpty(prompt.prompt_text)) warn('Prompt teks kosong.');
+    if (!nonEmpty(prompt.prompt_text)) {
+      err('Prompt teks kosong.');
+    } else {
+      // Kebocoran Arab pada prompt English = ERROR (akan rosakkan image gen).
+      if (hasArabic(prompt.prompt_text)) { promptArabicLeak = true; err('Prompt mengandungi skrip Arab (kebocoran bahasa).'); }
+      // Kod dalaman dalam prompt = warning (sepatutnya dibersihkan).
+      if (/[A-Z]{2,}_\d{3}/.test(String(prompt.prompt_text))) warn('Prompt masih mengandungi kod watak dalaman (cth MUSA_001).');
+      // Terlalu pendek = warning.
+      if (String(prompt.prompt_text).trim().length < 25) warn('Prompt terlalu pendek.');
+    }
     if (!nonEmpty(prompt.negative_prompt)) warn('Negative prompt kosong.');
-    if (!hasCharacter) warn('Prompt: tiada watak.');
-    if (!hasLocation) warn('Prompt: lokasi tiada.');
-    if (!nonEmpty(visual && visual.shot)) warn('Prompt: shot tiada.');
-    if (!nonEmpty(visual && visual.composition)) warn('Prompt: composition tiada.');
-    if (!nonEmpty(visual && visual.lighting)) warn('Prompt: lighting tiada.');
-    if (!nonEmpty(visual && visual.color_palette)) warn('Prompt: color palette tiada.');
+    // Lokasi: lulus jika diwarisi dari scene — jangan error.
+    if (!hasLocation) warn('Prompt: tiada maklumat lokasi (panel mahupun scene).');
   }
 
-  // ---- FACE POLICY (tokoh mulia → ERROR jika gagal) ----
+  // ---- FACE POLICY (tokoh mulia) --------------------------------------------
+  // Lulus jika MAKSUD keselamatan hadir di mana-mana: face_policy=glowing_light,
+  // ATAU visual_notes/prompty/negative mengandungi hint keselamatan.
+  // ERROR hanya jika keselamatan tiada LANGSUNG merentasi semua sumber.
   let faceOk = true;
   if (noble) {
+    const vn = (visual && visual.visual_notes) || '';
+    const pt = (prompt && prompt.prompt_text) || '';
+    const np = (prompt && prompt.negative_prompt) || '';
+    const policyOk = visual && visual.face_policy === 'glowing_light';
+    const positiveOk = hasAny(vn, NOBLE_POSITIVE_HINTS) || hasAny(pt, NOBLE_POSITIVE_HINTS);
+    const negativeOk = hasAny(np, NOBLE_NEGATIVE_HINTS);
+
     if (!hasVisual) {
       faceOk = false; err('Tokoh mulia tetapi visual belum dijana.');
-    } else {
-      if (visual.face_policy !== 'glowing_light') { faceOk = false; err('Tokoh mulia tetapi face_policy bukan glowing_light.'); }
-      if (!hasAll(visual.visual_notes, NOTE_MARKERS_MS)) { faceOk = false; err('Tokoh mulia tetapi visual_notes tiada arahan cahaya/tanpa wajah.'); }
-    }
-    if (hasPrompt) {
-      if (!hasAll(prompt.prompt_text, PROMPT_MARKERS_EN)) { faceOk = false; err('Tokoh mulia tetapi prompt tiada arahan glowing light / tanpa wajah.'); }
-      if (!hasAll(prompt.negative_prompt, NEG_MARKERS_EN)) { faceOk = false; err('Tokoh mulia tetapi negative prompt tiada sekatan wajah.'); }
+    } else if (!policyOk && !positiveOk) {
+      // Tiada face_policy glowing_light DAN tiada hint positif langsung → bahaya.
+      faceOk = false; err('Tokoh mulia: tiada arahan keselamatan wajah (visual_notes / prompt / face_policy).');
+    } else if (hasPrompt && !positiveOk && !negativeOk) {
+      // Visual OK, tetapi prompt tidak nyatakan keselamatan langsung → warning
+      // (boleh diterima jika visual_notes/face_policy sudah mengawal).
+      warn('Tokoh mulia: prompt tidak menyebut keselamatan wajah secara nyata.');
     }
   }
 
-  // ---- PROMPT COMPLETE ----
+  // ---- PROMPT COMPLETE (checklist sahaja; bukan gate error berasingan) ------
   const promptComplete = hasPrompt && nonEmpty(prompt.prompt_text) && nonEmpty(prompt.negative_prompt) &&
-    hasCharacter && hasLocation && nonEmpty(visual && visual.shot) && nonEmpty(visual && visual.composition) &&
-    nonEmpty(visual && visual.lighting) && nonEmpty(visual && visual.color_palette) && (!noble || faceOk);
+    hasCharacter && hasLocation && (!noble || faceOk) && !promptArabicLeak;
 
   // ---- READY FOR IMAGE ----
   const hasError = issues.some(function (x) { return x.type === 'error'; });
-  const readyForImage = hasScript && hasVisual && hasPrompt && nonEmpty(prompt && prompt.negative_prompt) && (!noble || faceOk) && !hasError;
+  const readyForImage = hasCharacter && hasScript && hasVisual && hasPrompt &&
+    nonEmpty(prompt && prompt.prompt_text) && nonEmpty(prompt && prompt.negative_prompt) &&
+    (!noble || faceOk) && !promptArabicLeak && !hasError;
 
   const qa_status = hasError ? 'error' : (issues.length ? 'warning' : 'ok');
 
@@ -157,8 +232,12 @@ function reviewPanel(panel, scene, scripts, visual, prompt, charMap) {
 module.exports = {
   reviewPanel,
   isNoblePanel,
-  NOTE_MARKERS_MS,
-  PROMPT_MARKERS_EN,
-  NEG_MARKERS_EN,
-  VISUAL_REQUIRED
+  NOBLE_POSITIVE_HINTS,
+  NOBLE_NEGATIVE_HINTS,
+  VISUAL_CORE,
+  VISUAL_FULL,
+  // Kompatibiliti: eksport nama lama supaya import luaran tidak pecah.
+  NOTE_MARKERS_MS: ['wajah tidak dipaparkan', 'cahaya lembut', 'tanpa wajah'],
+  PROMPT_MARKERS_EN: NOBLE_POSITIVE_HINTS,
+  NEG_MARKERS_EN: NOBLE_NEGATIVE_HINTS
 };

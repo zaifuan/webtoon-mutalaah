@@ -322,15 +322,24 @@ function recoverPanelsFromTruncated(rawText) {
   return objs;
 }
 
-function parsePanels(json, rawText) {
+function parsePanels(json, rawText, payload) {
   let arr = asArray(json && json.panels);
   // Fasa 22: jika JSON gagal/tak lengkap, cuba pulih panel yang lengkap daripada
   // teks mentah terpotong (elak token dibazirkan tanpa sebarang panel).
   if (!arr.length && rawText) arr = recoverPanelsFromTruncated(rawText);
   if (!arr.length) return null;
+  // Fasa 22 (Pilihan B): watak adegan sebagai fallback warisan. Jika Claude
+  // kosongkan characters bagi sesuatu panel (cth. establishing shot), wariskan
+  // daripada scene.characters_json. Jika scene juga kosong, kekal [] (jangan
+  // cipta watak palsu).
+  const sceneChars = asArray(payload && payload.scene && payload.scene.characters_json)
+    .map(function (x) { return String(x).trim().toUpperCase().replace(/\s+/g, '_'); })
+    .filter(Boolean);
   const out = arr.map(function (pObj, i) {
     const no = i + 1;
     const captionAr = s(pObj.caption_ar);
+    let chars = asArray(pObj.characters).map(function (x) { return String(x).trim().toUpperCase().replace(/\s+/g, '_'); }).filter(Boolean);
+    if (!chars.length && sceneChars.length) chars = sceneChars.slice();
     return {
       panel_no: no,
       panel_order: no,
@@ -344,7 +353,7 @@ function parsePanels(json, rawText) {
       emotion_ms: s(pObj.emotion) || null,
       location: s(pObj.location) || null,
       mood: s(pObj.mood) || null,
-      characters_json: asArray(pObj.characters).map(function (x) { return String(x).trim().toUpperCase().replace(/\s+/g, '_'); }).filter(Boolean),
+      characters_json: chars,
       caption_ms: captionAr,   // kapsyen Arab -> caption_ms (dibaca oleh eksport)
       caption_ar: '',
       dialogue_ar: null,
@@ -534,7 +543,7 @@ function parseReview(json) {
 function parse(engine, rawText, payload) {
   const json = extractJson(rawText);
   // Panel/Script/Visual/Prompt: cuba pulih walaupun JSON utama gagal/terpotong (Fasa 22).
-  if (engine === 'panel') return parsePanels(json, rawText);
+  if (engine === 'panel') return parsePanels(json, rawText, payload);
   if (engine === 'script') return parseScripts(json, rawText);
   if (engine === 'visual') return parseVisual(json, payload, rawText);
   if (engine === 'prompt') return parsePrompt(json, payload, rawText);
