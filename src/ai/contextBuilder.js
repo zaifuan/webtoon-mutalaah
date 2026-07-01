@@ -94,6 +94,58 @@ function continuityFrom(scene, panel) {
   };
 }
 
+// ===========================================================================
+// FASA 23: helper untuk lapisan Narrative Beat (Scene -> Beat -> Panel).
+// Additive sahaja — tidak mengubah continuityFrom/panelBrief/dll sedia ada.
+// ===========================================================================
+
+// Ringkasan padat SATU beat — dihantar kepada Panel/Script/Visual Director
+// pada fasa akan datang supaya mereka mewarisi niat dramatik beat, bukan
+// sekadar scene.mood yang statik sepanjang babak.
+function beatBrief(beat) {
+  const b = beat || {};
+  return {
+    beat_no: b.beat_no,
+    beat_type: s(b.beat_type),
+    purpose: s(b.purpose),
+    emotion: s(b.emotion),
+    tension_level: (b.tension_level === undefined || b.tension_level === null) ? null : b.tension_level,
+    visual_intent: s(b.visual_intent),
+    suggested_panel_count: (b.suggested_panel_count && typeof b.suggested_panel_count === 'object')
+      ? { min: b.suggested_panel_count.min, max: b.suggested_panel_count.max }
+      : null,
+    transition_from_previous: s(b.transition_from_previous)
+  };
+}
+
+// Ringkasan padat SENARAI beat (satu babak) — untuk konteks yang perlu
+// melihat keseluruhan lengkung emosi babak, bukan satu beat sahaja.
+function beatsBrief(beats) {
+  return asArray(beats).map(beatBrief);
+}
+
+// Continuity Beat -> Beat, khususnya merentasi SEMPADAN BABAK (Scene N ->
+// Scene N+1) — supaya emosi/tension beat TERAKHIR babak sebelum ini menjadi
+// input eksplisit kepada beat PERTAMA babak seterusnya (falsafah pengarahan,
+// Bahagian 5: Emotional Curve). Berbeza daripada continuityFrom() yang hanya
+// membawa lokasi/mood/masa peringkat scene->panel dalam SATU babak sahaja.
+//   scene         : babak semasa (yang Beat-nya sedang dijana)
+//   previousBeat  : beat TERAKHIR daripada babak sebelumnya (jika ada; null
+//                   pada babak pertama projek)
+function continuityFromBeat(scene, previousBeat) {
+  const sc = scene || {};
+  const pb = previousBeat || {};
+  return {
+    location: s(sc.location),
+    mood: s(sc.mood),
+    scene_type: s(sc.scene_type),
+    previous_beat_type: s(pb.beat_type),
+    previous_emotion: s(pb.emotion),
+    previous_tension_level: (pb.tension_level === undefined || pb.tension_level === null) ? null : pb.tension_level,
+    previous_transition: s(pb.transition_from_previous)
+  };
+}
+
 // Ringkasan panel untuk Review (bukan dump penuh) — medan bermakna sahaja.
 // Tujuan: Review Director dapat menilai tanpa menghabiskan token pada medan
 // teknikal/kosong.
@@ -155,5 +207,9 @@ module.exports = {
   panelBrief,
   scriptBrief,
   visualBrief,
-  promptBrief
+  promptBrief,
+  // Fasa 23: Narrative Beat
+  beatBrief,
+  beatsBrief,
+  continuityFromBeat
 };

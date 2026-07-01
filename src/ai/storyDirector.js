@@ -40,6 +40,16 @@ const SHOT_TYPES = ['wide', 'medium', 'close_up', 'over_shoulder', 'low_angle', 
 const SCRIPT_TYPES = ['narration', 'dialogue', 'thought', 'dua', 'sfx', 'caption', 'reaction'];
 const BUBBLE_TYPES = ['speech', 'thought', 'narration', 'dua', 'sfx', 'caption', 'none'];
 const EMOTIONS = ['neutral', 'calm', 'solemn', 'sad', 'happy', 'angry', 'fear', 'surprised', 'thinking', 'respectful', 'wonder'];
+// Fasa 23: lapisan Narrative Beat (Scene -> Beat -> Panel). Selaras corak
+// pemisahan enum sedia ada (setiap fail mengekalkan salinan tempatan sendiri).
+const BEAT_TYPES = [
+  'orientation', 'question', 'instruction', 'commitment', 'tension_build',
+  'incident', 'objection', 'silence', 'reveal', 'reflection', 'dua_moment',
+  'farewell', 'transition'
+];
+const TRANSITION_TYPES = ['none', 'continuous', 'hard_cut', 'contrast', 'escalation', 'release', 'echo'];
+// Emosi beat: EMOTIONS sedia ada + tambahan kehalusan lengkung emosi (falsafah pengarahan, Bahagian 2).
+const BEAT_EMOTIONS = EMOTIONS.concat(['curiosity', 'anticipation', 'relief']);
 
 // Nota tokoh mulia (Arab) — DIKUATKUASAKAN secara deterministik kemudian.
 const NOBLE_NOTE_AR =
@@ -122,45 +132,69 @@ const SYS = {
     'نوع المشهد (scene_type) أحدها: ' + SCENE_TYPES.join(' | ') + '. استخدم رموز الشخصيات المعطاة فقط.\n' +
     'أعِد: {"scenes":[{"scene_no":1,"title_ar":"","summary_ar":"","objective_ar":"","mood":"","location":"","scene_type":"","characters":["CODE"]}]}',
 
+  beat:
+    COMMON_RULES_AR + '\n' +
+    'مهمتك: قسّم المشهد المعطى إلى وحدات درامية متتالية تسمى "اللقطات السردية" (Narrative Beats) — من 2 إلى 6 لقطات لكل مشهد. ' +
+    'كل لقطة سردية تمثّل وظيفة درامية واحدة واضحة (وليست لقطة كاميرا)، ويجب أن تُغيّر شيئًا: عاطفة القارئ، أو فهمه، أو العلاقة بين الشخصيات. ' +
+    'لا تُنشئ لقطة سردية بلا وظيفة واضحة. اجعل شدة التوتر (tension_level) تتصاعد أو تهبط بمنطق درامي عبر تسلسل اللقطات داخل المشهد، ' +
+    'وإذا تكرر حدث مشابه عبر عدة مشاهد متتالية (كاعتراضات متكررة)، اجعل شدته تتصاعد تدريجيًا وليست متساوية. ' +
+    'حدد لكل لقطة عدد اللوحات المقترح كنطاق (حد أدنى وحد أقصى) وليس رقمًا ثابتًا؛ امنح اللقطات الحاسمة (incident, reveal) حدًا أدنى أعلى، ' +
+    'وامنح لقطات الهدوء والانتقال (silence, transition) حدًا أقصى منخفضًا (غالبًا لوحة واحدة). ' +
+    'حدد أيضًا كيف ترتبط كل لقطة باللقطة السابقة لها (transition_from_previous) — مثل استمرار المزاج أو تصاعده أو انقطاعه أو تناقضه. ' +
+    'نوع اللقطة السردية (beat_type) أحد هذه فقط: ' + BEAT_TYPES.join(' | ') + '. ' +
+    'العاطفة (emotion) أحدها: ' + BEAT_EMOTIONS.join(' | ') + '. ' +
+    'الانتقال من اللقطة السابقة (transition_from_previous) أحدها: ' + TRANSITION_TYPES.join(' | ') + '.\n' +
+    'أعِد: {"beats":[{"beat_no":1,"beat_type":"","purpose":"","emotion":"","tension_level":1,"visual_intent":"","suggested_panel_count":{"min":1,"max":2},"transition_from_previous":"none"}]}',
+
   panel:
     COMMON_RULES_AR + '\n' +
-    'مهمتك: حوّل المشهد إلى لوحات (panels) بصرية متسلسلة. أنتج عدداً موجزاً من اللوحات (٢ إلى ٤ لوحات فقط) يكفي لتغطية الحدث دون إطالة. ' +
-    'لكل لوحة: نوعها، ونوع اللقطة، ووصف بصري عربي قصير (جملة واحدة)، والشخصيات الحاضرة (بالرموز فقط). ' +
-    'اجعل الـ JSON موجزاً قدر الإمكان: لا تكرر الحقول، وتجنّب التعليقات والشرح. احرص على استمرارية سمات الشخصية (نفس الـ DNA). ' +
-    'نوع اللوحة (panel_type) أحدها فقط: ' + PANEL_TYPES.join(' | ') + '. ' +
-    'نوع اللقطة (shot_type) أحدها فقط: ' + SHOT_TYPES.join(' | ') + '.\n' +
-    'أعِد: {"panels":[{"panel_type":"","shot_type":"","visual_ar":"","characters":["CODE"]}]}',
+    'مهمتك: حوّل المشهد إلى لوحات (panels) بصرية متسلسلة. أنت تقرّر عدد اللوحات المناسب (٢ إلى ٦) حسب الحدث، ' +
+    'ونوع اللقطة، والتكوين، والحركة، والعاطفة، وتدفّق السرد. لكل لوحة: نوعها، ونوع اللقطة، ووصف بصري عربي، ' +
+    'وكابتشن عربي مختصر، والشخصيات الحاضرة (بالرموز). لا تعتمد على قوالب «beat» جاهزة؛ قرّر بصريًا حسب النص. ' +
+    'احرص على استمرارية اللباس والسمات بين اللوحات (نفس الـ DNA للشخصية)، وعلى تسلسل مكاني منطقي داخل المشهد. ' +
+    'نوع اللوحة (panel_type) أحدها: ' + PANEL_TYPES.join(' | ') + '. ' +
+    'نوع اللقطة (shot_type) أحدها: ' + SHOT_TYPES.join(' | ') + '.\n' +
+    'أعِد: {"panels":[{"panel_no":1,"panel_type":"","shot_type":"","composition":"","camera":"eye_level","visual_ar":"","caption_ar":"","emotion":"","characters":["CODE"]}]}',
 
   script:
     COMMON_RULES_AR + '\n' +
-    'مهمتك: اكتب نص اللوحة بالعربية الفصحى موجزاً (من ١ إلى ٣ عناصر فقط يكفي لتغطية اللوحة). ' +
-    'لكل عنصر: نوعه، والمتحدّث (بالرمز إن كان حوارًا)، ونص عربي قصير. ' +
-    'النصوص القرآنية تُنقل بدقّة إن وُجدت. اجعل الـ JSON موجزاً قدر الإمكان: لا تكرر الحقول وتجنّب التعليقات. ' +
-    'نوع العنصر (script_type) أحدها فقط: ' + SCRIPT_TYPES.join(' | ') + '. ' +
-    'العاطفة (emotion) أحدها فقط: ' + EMOTIONS.join(' | ') + '. نوع الفقاعة (bubble_type) أحدها فقط: ' + BUBBLE_TYPES.join(' | ') + '.\n' +
+    'مهمتك: اكتب نص اللوحة كاملًا بالعربية الفصحى: حوار، وسرد، وكابتشن حسب الحاجة (قد يحتوي عنصرًا واحدًا أو أكثر). ' +
+    'لكل عنصر: نوعه، والمتحدّث (بالرمز إن كان حوارًا)، والنص العربي، والعاطفة، ونوع الفقاعة. ' +
+    'لا تستخدم نصوصًا مكتوبة مسبقًا، ولا اللغة الملايوية. النصوص القرآنية تُنقل بدقّة إن وُجدت في المصدر. ' +
+    'حافظ على نبرة كل شخصية وثابتة (لا يتغيّر أسلوب الكلام للشخصية نفسها بين اللوحات). ' +
+    'نوع العنصر (script_type) أحدها: ' + SCRIPT_TYPES.join(' | ') + '. ' +
+    'العاطفة (emotion) أحدها: ' + EMOTIONS.join(' | ') + '. نوع الفقاعة (bubble_type) أحدها: ' + BUBBLE_TYPES.join(' | ') + '.\n' +
     'أعِد: {"scripts":[{"script_type":"","speaker_code":"","text_ar":"","emotion":"","bubble_type":""}]}',
 
   visual:
     COMMON_RULES_AR + '\n' +
-    'مهمتك (مدير التصوير): حدّد المعالجة البصرية للوحة — قيم تقنية إنجليزية موجزة فقط. ' +
-    'ركّز على الحقول الأساسية (shot/angle/lens/lighting/color_palette/composition). أضف "visual_notes" عربية قصيرة جدًا. ' +
-    'حافظ على استمرارية المكان والإضاءة بين اللوحات. إن حضرت شخصية مكرّمة فاجعل face_policy=glowing_light. ' +
-    'كل القيمة من القوائم المسموحة فقط، واجعل الـ JSON موجزاً بلا شرح.\n' +
-    'المسموح: shot (' + ENUMS.shot.join('/') + ')، angle (' + ENUMS.angle.join('/') + ')، lens (' + ENUMS.lens.join('/') +
-    ')، lighting (' + ENUMS.lighting.join('/') + ')، color_palette (' + ENUMS.color_palette.join('/') +
-    ')، composition (' + ENUMS.composition.join('/') + ').\n' +
-    'أعِد: {"visual":{"shot":"","angle":"","lens":"","lighting":"","color_palette":"","composition":"","face_policy":"","visual_notes":""}}',
+    'مهمتك (مدير التصوير): حدّد المعالجة البصرية للوحة لمساعدة محرّك الـ prompt. القيم من القوائم المسموحة فقط ' +
+    '(بالإنجليزية كرموز تقنية، وليست لغة بشرية). أضف "visual_notes" موجزة بالعربية. ' +
+    'وازن بين اختياراتك وبين استمرارية المكان والمزاج الواردة من المشهد السابق حتى لا تتغيّر الإضاءة أو الطقس بلا سبب سردي. ' +
+    'إذا حضرت شخصية مكرّمة فاجعل face_policy=glowing_light.\n' +
+    'القيم المسموحة: shot=' + ENUMS.shot.join('/') + '؛ angle=' + ENUMS.angle.join('/') + '؛ lens=' + ENUMS.lens.join('/') +
+    '؛ composition=' + ENUMS.composition.join('/') + '؛ camera_movement=' + ENUMS.camera_movement.join('/') +
+    '؛ lighting=' + ENUMS.lighting.join('/') + '؛ atmosphere=' + ENUMS.atmosphere.join('/') +
+    '؛ time_of_day=' + ENUMS.time_of_day.join('/') + '؛ weather=' + ENUMS.weather.join('/') +
+    '؛ color_palette=' + ENUMS.color_palette.join('/') + '؛ focus=' + ENUMS.focus.join('/') +
+    '؛ depth=' + ENUMS.depth.join('/') + '؛ detail_level=' + ENUMS.detail_level.join('/') +
+    '؛ visual_priority=' + ENUMS.visual_priority.join('/') + '.\n' +
+    'أعِد: {"visual":{"shot":"","angle":"","lens":"","composition":"","camera_movement":"","lighting":"","atmosphere":"","time_of_day":"","weather":"","color_palette":"","focus":"","depth":"","detail_level":"","visual_priority":"","face_policy":"","visual_notes":""}}',
 
   // PROMPT ENGINE: مُخرَج إنجليزي فقط (لِـ ComfyUI). لا عربية ولا ملايوية ولا رموز داخلية.
-  // Fasa 22: dipendekkan untuk elak truncation max_tokens + jimat token.
+  // Fasa 21: struktur profesional (subject → camera → lighting → style) + quality tags
+  // SDXL/Flux + vertical aspect + character consistency + noble-figure safety.
   prompt:
-    'You are the Image Prompt Director for an Islamic educational webtoon (SDXL/Flux via ComfyUI). ' +
-    'Produce ONE concise professional ENGLISH image prompt plus an ENGLISH negative prompt for the panel. ' +
-    'English ONLY. NEVER include Arabic, Malay, internal character codes (e.g. MUSA_001), placeholders, markdown, or code fences. ' +
-    'Keep it SHORT and concrete: subject & action, then camera (shot/angle/lens), lighting, modest historical clothing, and 2–3 quality tags (highly detailed, sharp focus, cinematic). ' +
-    'Vertical webtoon framing. Reuse the given character DNA for consistency. ' +
-    'For noble figures (prophets): the face MUST be replaced by soft glowing light — no eyes/nose/mouth; reflect in the negative prompt. ' +
-    'Reply with ONLY valid JSON, nothing else: {"prompt_text":"","negative_prompt":""}',
+    'You are the Image Prompt Director for an Islamic educational webtoon rendered by a Stable Diffusion model (SDXL / Flux via ComfyUI). ' +
+    'Produce ONE professional ENGLISH image prompt and an ENGLISH negative prompt for the given panel. ' +
+    'English ONLY — never include Arabic, Malay, internal character codes (e.g. MUSA_001), placeholders, or commentary in the prompt.\n' +
+    'STRUCTURE the positive prompt as a clear flow: [subject & action] → [camera: shot/angle/lens] → [composition] → [lighting & atmosphere] → [environment & weather] → [clothing: modest historical] → [style & quality]. ' +
+    'Lead with the concrete subject and what it is doing; keep it vertical webtoon framing (tall aspect, portrait orientation). ' +
+    'Apply the character DNA given in the context so the SAME character looks identical across panels (age, robe color, headwear, props). ' +
+    'For noble figures (prophets/righteous): the face MUST be fully replaced by soft glowing light — no eyes, nose, mouth, or facial features; reflect this in the negative prompt too.\n' +
+    'Append concise quality/render tags suited to SDXL/Flux (e.g. highly detailed, sharp focus, clean line art, cinematic lighting, professional illustration), but do NOT pad with redundant words or repeat instructions. ' +
+    'Do NOT invent characters or story facts beyond the provided context.\n' +
+    'Reply with ONLY valid JSON: {"prompt_text":"","negative_prompt":""}',
 
   review:
     COMMON_RULES_AR + '\n' +
@@ -185,6 +219,15 @@ function userFor(engine, payload) {
       return 'النص المصدر (عربي):\n' + s(p.text_ar) +
         '\n\nالشخصيات المتاحة (استخدم رموزها ولا تخترع رموزًا جديدة): ' + jstr(ctx.charsBrief(p.characters)) +
         '\n\nقسّم القصة إلى مشاهد بصيغة JSON المطلوبة.';
+    case 'beat':
+      return 'المشهد: ' + jstr({
+        scene_no: p.scene && p.scene.scene_no, title_ar: p.scene && (p.scene.title_ar || p.scene.title_ms),
+        summary_ar: p.scene && (p.scene.summary_ar || p.scene.summary_ms), mood: p.scene && p.scene.mood,
+        location: p.scene && p.scene.location, scene_type: p.scene && p.scene.scene_type,
+        characters: asArray(p.scene && p.scene.characters_json)
+      }) + '\nالشخصيات: ' + jstr(ctx.charsBrief(p.characters)) +
+        '\nاستمرارية من آخر لقطة سردية في المشهد السابق (إن وُجدت): ' + jstr(ctx.continuityFromBeat(p.scene, p.previous_beat)) +
+        '\n\nقسّم المشهد إلى لقطات سردية (Narrative Beats) بصيغة JSON المطلوبة.';
     case 'panel':
       return 'المشهد: ' + jstr({
         scene_no: p.scene && p.scene.scene_no, title_ar: p.scene && (p.scene.title_ar || p.scene.title_ms),
@@ -305,41 +348,42 @@ function parseScenes(json) {
   return out.length ? out : null;
 }
 
-// Pulih panel dari JSON terpotong (max_tokens). Claude mungkin terhenti di tengah
-// array; kita cuba selamatkan setiap objek panel yang lengkap (cari } terdekat).
-function recoverPanelsFromTruncated(rawText) {
-  if (!rawText) return [];
-  const t = String(rawText);
-  // Cari "panels":[ ... ] dan ekstrak objek lengkap di dalamnya.
-  const start = t.indexOf('panels');
-  const seg = start !== -1 ? t.slice(start) : t;
-  const objs = [];
-  const re = /\{[^{}]*\}/g; // objek satu aras (panel kita rata, tiada bersarang)
-  let m;
-  while ((m = re.exec(seg)) !== null) {
-    try { objs.push(JSON.parse(m[0])); } catch (e) { /* objek tak lengkap, langkau */ }
-  }
-  return objs;
+// Fasa 23: parseBeats — pecahkan satu Scene kepada 2-6 Narrative Beat.
+// Beat tanpa 'purpose' (tiada tujuan dramatik) digugurkan (Prinsip Pengarahan #1).
+// Kurang daripada 2 beat sah selepas penapisan -> pulang null (isyarat fallback
+// deterministik ke sceneEngine.extractBeats). Lebih daripada 6 -> dipotong kepada 6.
+function parseBeats(json) {
+  const arr = asArray(json && json.beats);
+  if (!arr.length) return null;
+  let out = arr.map(function (bObj) {
+    const raw = (bObj && bObj.suggested_panel_count) || {};
+    const min = clampInt(raw.min, 1, 8, 1);
+    const max = clampInt(raw.max, min, 8, Math.max(min, 2));
+    return {
+      beat_type: pickEnum(bObj.beat_type, BEAT_TYPES, 'orientation'),
+      purpose: s(bObj.purpose),
+      emotion: pickEnum(bObj.emotion, BEAT_EMOTIONS, 'neutral'),
+      tension_level: clampInt(bObj.tension_level, 1, 5, 2),
+      visual_intent: s(bObj.visual_intent),
+      suggested_panel_count: { min: min, max: max },
+      transition_from_previous: pickEnum(bObj.transition_from_previous, TRANSITION_TYPES, 'continuous')
+    };
+  }).filter(function (b) { return !!b.purpose; });
+
+  // Falsafah pengarahan: setiap Scene mempunyai 2-6 beat.
+  if (out.length > 6) out = out.slice(0, 6);
+  if (out.length < 2) return null;
+
+  out.forEach(function (b, idx) { b.beat_no = idx + 1; });
+  return out;
 }
 
-function parsePanels(json, rawText, payload) {
-  let arr = asArray(json && json.panels);
-  // Fasa 22: jika JSON gagal/tak lengkap, cuba pulih panel yang lengkap daripada
-  // teks mentah terpotong (elak token dibazirkan tanpa sebarang panel).
-  if (!arr.length && rawText) arr = recoverPanelsFromTruncated(rawText);
+function parsePanels(json) {
+  const arr = asArray(json && json.panels);
   if (!arr.length) return null;
-  // Fasa 22 (Pilihan B): watak adegan sebagai fallback warisan. Jika Claude
-  // kosongkan characters bagi sesuatu panel (cth. establishing shot), wariskan
-  // daripada scene.characters_json. Jika scene juga kosong, kekal [] (jangan
-  // cipta watak palsu).
-  const sceneChars = asArray(payload && payload.scene && payload.scene.characters_json)
-    .map(function (x) { return String(x).trim().toUpperCase().replace(/\s+/g, '_'); })
-    .filter(Boolean);
   const out = arr.map(function (pObj, i) {
     const no = i + 1;
     const captionAr = s(pObj.caption_ar);
-    let chars = asArray(pObj.characters).map(function (x) { return String(x).trim().toUpperCase().replace(/\s+/g, '_'); }).filter(Boolean);
-    if (!chars.length && sceneChars.length) chars = sceneChars.slice();
     return {
       panel_no: no,
       panel_order: no,
@@ -353,7 +397,7 @@ function parsePanels(json, rawText, payload) {
       emotion_ms: s(pObj.emotion) || null,
       location: s(pObj.location) || null,
       mood: s(pObj.mood) || null,
-      characters_json: chars,
+      characters_json: asArray(pObj.characters).map(function (x) { return String(x).trim().toUpperCase().replace(/\s+/g, '_'); }).filter(Boolean),
       caption_ms: captionAr,   // kapsyen Arab -> caption_ms (dibaca oleh eksport)
       caption_ar: '',
       dialogue_ar: null,
@@ -365,26 +409,8 @@ function parsePanels(json, rawText, payload) {
   return out.length ? out : null;
 }
 
-// Pulih script dari JSON terpotong (max_tokens). Cari objek script lengkap
-// (rata satu aras) dalam teks mentah yang mungkin terhenti di tengah array.
-function recoverScriptsFromTruncated(rawText) {
-  if (!rawText) return [];
-  const t = String(rawText);
-  const start = t.indexOf('scripts');
-  const seg = start !== -1 ? t.slice(start) : t;
-  const objs = [];
-  const re = /\{[^{}]*\}/g;
-  let m;
-  while ((m = re.exec(seg)) !== null) {
-    try { objs.push(JSON.parse(m[0])); } catch (e) { /* objek tak lengkap, langkau */ }
-  }
-  return objs;
-}
-
-function parseScripts(json, rawText) {
-  let arr = asArray(json && json.scripts);
-  // Fasa 22: jika JSON gagal/tak lengkap, cuba pulih script yang lengkap.
-  if (!arr.length && rawText) arr = recoverScriptsFromTruncated(rawText);
+function parseScripts(json) {
+  const arr = asArray(json && json.scripts);
   if (!arr.length) return null;
   const out = arr.map(function (it, idx) {
     const order = idx + 1;
@@ -407,39 +433,8 @@ function parseScripts(json, rawText) {
   return out.length ? out : null;
 }
 
-// Pulih objek visual dari JSON terpotong (max_tokens). Cari objek "visual":
-// {...} yang lengkap; jika tiada (terpotong), cuba tutup pendakap hilang.
-function recoverVisualFromTruncated(rawText) {
-  if (!rawText) return null;
-  const t = String(rawText);
-  const start = t.indexOf('visual');
-  const seg = start !== -1 ? t.slice(start) : t;
-  // Cuba objek satu-arus lengkap dahulu.
-  const re = /\{[^{}]*\}/g;
-  let m;
-  while ((m = re.exec(seg)) !== null) {
-    try {
-      const o = JSON.parse(m[0]);
-      if (o && typeof o === 'object') return o;
-    } catch (e) { /* objek tak lengkap, cuba seterusnya */ }
-  }
-  // Fallback: objek terpotong — ekstrak medan "key":"value" secara regex, tutup
-  // dengan } untuk simulasi objek lengkap.
-  const inner = seg.indexOf('{');
-  if (inner !== -1) {
-    const fields = {};
-    const fre = /"(shot|angle|lens|composition|camera_movement|lighting|atmosphere|time_of_day|weather|color_palette|focus|depth|detail_level|visual_priority|face_policy|visual_notes)"\s*:\s*"([^"]*)"/g;
-    let fm;
-    while ((fm = fre.exec(seg)) !== null) { fields[fm[1]] = fm[2]; }
-    if (Object.keys(fields).length) return fields;
-  }
-  return null;
-}
-
-function parseVisual(json, payload, rawText) {
-  let v = json && json.visual;
-  // Fasa 22: jika JSON utama gagal/tak lengkap, cuba pulih objek visual.
-  if (!v || typeof v !== 'object') v = recoverVisualFromTruncated(rawText);
+function parseVisual(json, payload) {
+  const v = json && json.visual;
   if (!v || typeof v !== 'object') return null;
   function en(field, val) { return ENUMS[field] && ENUMS[field].indexOf(String(val || '').toLowerCase()) !== -1 ? String(val).toLowerCase() : null; }
   const out = {
@@ -469,24 +464,10 @@ function parseVisual(json, payload, rawText) {
 // Fasa 21: validation pre-ComfyUI — steril prompt (buci token internal/Arab/MB),
 // deteksi kebocoran bahasa, penegasan tokoh mulia ketat, batas panjang.
 // Pulang null (isyarat fallback deterministik) jika prompt tidak boleh diselamatkan.
-function parsePrompt(json, payload, rawText) {
-  let promptText = '';
-  let negative = '';
-  if (json && typeof json === 'object') {
-    promptText = s(json.prompt_text).trim();
-    negative = s(json.negative_prompt).trim();
-  }
-  // Fasa 22: jika JSON gagal/terpotong, cuba pulih prompt_text & negative_prompt
-  // secara regex daripada teks mentah (elak token dibazirkan tanpa output).
-  if (!promptText && rawText) {
-    const t = String(rawText);
-    const pm = t.match(/"prompt_text"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-    if (pm) {
-      promptText = pm[1].replace(/\\"/g, '"').replace(/\\n/g, ' ').trim();
-      const nm = t.match(/"negative_prompt"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-      if (nm) negative = nm[1].replace(/\\"/g, '"').replace(/\\n/g, ' ').trim();
-    }
-  }
+function parsePrompt(json, payload) {
+  if (!json || typeof json !== 'object') return null;
+  let promptText = s(json.prompt_text).trim();
+  let negative = s(json.negative_prompt).trim();
   if (!promptText) return null;
 
   // ---- Sterilisasi: buang token yang TIDAK boleh sampai ke ComfyUI ----
@@ -542,15 +523,15 @@ function parseReview(json) {
 
 function parse(engine, rawText, payload) {
   const json = extractJson(rawText);
-  // Panel/Script/Visual/Prompt: cuba pulih walaupun JSON utama gagal/terpotong (Fasa 22).
-  if (engine === 'panel') return parsePanels(json, rawText, payload);
-  if (engine === 'script') return parseScripts(json, rawText);
-  if (engine === 'visual') return parseVisual(json, payload, rawText);
-  if (engine === 'prompt') return parsePrompt(json, payload, rawText);
   if (json === null || json === undefined) return null;
   switch (engine) {
     case 'character': return parseCharacters(json);
     case 'scene': return parseScenes(json);
+    case 'beat': return parseBeats(json);
+    case 'panel': return parsePanels(json);
+    case 'script': return parseScripts(json);
+    case 'visual': return parseVisual(json, payload);
+    case 'prompt': return parsePrompt(json, payload);
     case 'review': return parseReview(json);
     default: return null;
   }
@@ -564,5 +545,6 @@ module.exports = {
   NOBLE_NOTE_AR,
   // enum (untuk ujian/route jika perlu)
   CHARACTER_TYPES, SCENE_TYPES, PANEL_TYPES, SHOT_TYPES, SCRIPT_TYPES, BUBBLE_TYPES, EMOTIONS, FACE_POLICIES,
+  BEAT_TYPES, BEAT_EMOTIONS, TRANSITION_TYPES, // Fasa 23: Narrative Beat
   SYS
 };
